@@ -1,3 +1,22 @@
+configs:
+  rabbitmq_conf:
+    file: ./config/rabbitmq/rabbitmq.conf
+  rabbitmq_definitions:
+    file: ./config/rabbitmq/definitions.json
+  rabbitmq_init:
+    file: ./scripts/rabbitmq-init.sh
+
+volumes:
+  rabbitmq1_data:
+  rabbitmq2_data:
+  rabbitmq3_data:
+  redis_data:
+
+networks:
+  fog-network:
+    driver: overlay
+    attachable: true
+
 services:
   rabbitmq1:
     hostname: rabbitmq1
@@ -17,11 +36,18 @@ services:
       MQ_NODE2_PASS: ${MQ_NODE2_PASS}
       MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
       MQ_NODE3_PASS: ${MQ_NODE3_PASS}
+    configs:
+      - source: rabbitmq_conf
+        target: /etc/rabbitmq/rabbitmq.conf
+        mode: 0444
+      - source: rabbitmq_definitions
+        target: /etc/rabbitmq/definitions.json
+        mode: 0444
+      - source: rabbitmq_init
+        target: /init.sh
+        mode: 0555
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
-      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./scripts/rabbitmq-init.sh:/init.sh:ro
     networks:
       - fog-network
     entrypoint: ["/bin/bash", "-c"]
@@ -65,11 +91,18 @@ services:
       MQ_NODE2_PASS: ${MQ_NODE2_PASS}
       MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
       MQ_NODE3_PASS: ${MQ_NODE3_PASS}
+    configs:
+      - source: rabbitmq_conf
+        target: /etc/rabbitmq/rabbitmq.conf
+        mode: 0444
+      - source: rabbitmq_definitions
+        target: /etc/rabbitmq/definitions.json
+        mode: 0444
+      - source: rabbitmq_init
+        target: /init.sh
+        mode: 0555
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
-      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./scripts/rabbitmq-init.sh:/init.sh:ro
     networks:
       - fog-network
     entrypoint: ["/bin/bash", "-c"]
@@ -113,11 +146,18 @@ services:
       MQ_NODE2_PASS: ${MQ_NODE2_PASS}
       MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
       MQ_NODE3_PASS: ${MQ_NODE3_PASS}
+    configs:
+      - source: rabbitmq_conf
+        target: /etc/rabbitmq/rabbitmq.conf
+        mode: 0444
+      - source: rabbitmq_definitions
+        target: /etc/rabbitmq/definitions.json
+        mode: 0444
+      - source: rabbitmq_init
+        target: /init.sh
+        mode: 0555
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
-      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./scripts/rabbitmq-init.sh:/init.sh:ro
     networks:
       - fog-network
     entrypoint: ["/bin/bash", "-c"]
@@ -254,13 +294,3 @@ services:
   #   networks:
   #     - fog-network
 
-volumes:
-  rabbitmq1_data:
-  rabbitmq2_data:
-  rabbitmq3_data:
-  redis_data:
-
-networks:
-  fog-network:
-    driver: overlay
-    attachable: true

@@ -166,7 +166,7 @@ services:
        /bin/bash /init.sh 2>&1 | tee /var/log/init.log
        wait"
 
-rabbitmq-admin:
+  rabbitmq-admin:
     image: rabbitmq:4.1.6-management-alpine
     hostname: rabbitmq-admin
     networks:

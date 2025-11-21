@@ -65,14 +65,14 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		MQ1_REPLICAS=$$(docker service ls --filter name=$(PROJECT_NAME)_rabbitmq1 --format "{{.Replicas}}"); \
-		if echo "$$REPLICAS" | grep -q "1/1"; then \
-			echo "RabbitMQ1 is running ($$i/24)"; \
-			sleep 30; \
-			echo "RabbitMQ1 ready!"; \
-			exit 0; \
+		if [ -n "$$ADMIN_CONTAINER" ]; then \
+			if docker exec $$ADMIN_CONTAINER rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+				echo "RabbitMQ2 joined cluster"; \
+				sleep 5; \
+				exit 0; \
+			fi; \
 		fi; \
-		echo "Waiting for rabbitmq1 ($$i/24) - Current: $$REPLICAS"; \
+		printf "."; \
 		sleep 5; \
 	done; \
 	echo "RabbitMQ1 failed to start"; \
@@ -83,9 +83,8 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-			if docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
+		if [ -n "$$ADMIN_CONTAINER" ]; then \
+			if docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
 				echo "RabbitMQ2 joined cluster"; \
 				exit 0; \
 			fi; \
@@ -101,10 +100,9 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-			if docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
-				echo "RabbitMQ3 joined cluster"; \
+		if [ -n "$$ADMIN_CONTAINER" ]; then \
+			if docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
+				echo "RabbitMQ2 joined cluster"; \
 				exit 0; \
 			fi; \
 		fi; \
@@ -148,34 +146,31 @@ status:
 health:
 	@echo "Service Health"
 	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
-		CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_$$svc --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-		if [ -n "$$CONTAINER_ID" ]; then \
-			docker exec $$CONTAINER_ID rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "$$svc: healthy" || echo "$$svc: not healthy"; \
+		if [ -n "$$ADMIN_CONTAINER" ]; then \
+			if docker exec $$ADMIN_CONTAINER rabbitmq-diagnostics -n rabbit@$$svc ping >/dev/null 2>&1 && echo "$$svc: healthy" || echo "$$svc: not healthy"; \
 		else \
-			echo "$$svc: container not found"; \
+		echo "No admin manager found"; \
 		fi; \
 	done
 	
 	@echo ""
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning ping >/dev/null 2>&1 && echo "redis: healthy" || echo "redis: not healthy"; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		if @docker exec $$ADMIN_CONTAINER redis-cli -h redis -a ${REDIS_PASS} --no-auth-warning ping >/dev/null 2>&1 && echo "redis: healthy" || echo "redis: not healthy"; \
 	else \
-		echo "redis: container not found"; \
+		echo "No admin manager found"; \
 	fi
 	
 	@echo ""
-	@echo "=== Redis Coordinator ==="
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+	@echo "Redis Coordinator"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo -n "Members: "; \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' '; \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' '; \
 		echo ""; \
 		echo -n "Master:  "; \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null; \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null; \
 		echo ""; \
 	else \
-		echo "Redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 # ==========================================
@@ -233,28 +228,25 @@ logs-follow:
 # ==========================================
 
 rabbitmq:
-	@echo "=== Cluster Status ==="
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-		docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null; \
+	@echo "Cluster Status"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null; \
 	else \
-		echo "rabbitmq1 container not found"; \
+		echo "No admin manager found"; \
 	fi
 	@echo ""
-	@echo "=== Queues ==="
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-		docker exec $$MQ1_CONTAINER_ID rabbitmqctl list_queues name messages consumers 2>/dev/null; \
+	@echo "Queues"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null; \
 	else \
-		echo "rabbitmq1 container not found"; \
+		echo "No admin manager found"; \
 	fi
 	@echo ""
-	@echo "=== Users ==="
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-		docker exec $$MQ1_CONTAINER_ID rabbitmqctl list_users 2>/dev/null; \
+	@echo "Users"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+			docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1  list_users 2>/dev/null; \
 	else \
-		echo "rabbitmq1 container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 rabbitmq-ui:
@@ -267,14 +259,13 @@ rabbitmq-ui:
 
 rabbitmq-purge:
 	@echo "Purge all queues? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		for q in tasks.high_priority tasks.normal tasks.low_priority; do \
-			docker exec $$MQ1_CONTAINER_ID rabbitmqctl purge_queue $$q --vhost /fog; \
+			docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
 		done; \
 		echo "Queues purged"; \
 	else \
-		echo "rabbitmq1 container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 # ==========================================
@@ -283,92 +274,72 @@ rabbitmq-purge:
 
 redis:
 	@echo "=== Redis Info ==="
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 	@echo ""
-	@echo "=== Cluster State ==="
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
+	@echo "Cluster State"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 	@echo ""
-	@echo "=== All Keys ==="
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS '*'; \
+	@echo "All Keys"
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS '*'; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 redis-cli:
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec -it $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS); \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS); \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 redis-flush:
 	@echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
 		echo "Redis flushed"; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 redis-clear-cluster:
 	@echo "Clear cluster state? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master; \
-		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning DEL {}; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master; \
+		docker exec $$ADMIN_CONTAINER redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning DEL {}; \
 		echo "Cluster state cleared"; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 # ==========================================
 # Debug & Monitoring
 # ==========================================
 
-debug:
-	@echo "Stack Debug"
-	@docker stack ps $(PROJECT_NAME) --no-trunc
-	@echo ""
-	@echo "Container Logs"
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-		docker logs $$MQ1_CONTAINER_ID --tail 30; \
-	else \
-		echo "rabbitmq1 container not found"; \
-	fi
-
 monitor:
 	@echo "Monitoring (CTRL+C to stop)..."
 	@watch -n 2 '$(MAKE) health'
 
 inspect-rabbitmq:
-	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-		docker exec -it $$MQ1_CONTAINER_ID /bin/bash; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec -it $$ADMIN_CONTAINER /bin/bash; \
 	else \
-		echo "rabbitmq1 container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 inspect-redis:
-	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
-		docker exec -it $$REDIS_CONTAINER_ID /bin/sh; \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		docker exec -it $$ADMIN_CONTROLLER /bin/sh -h redis; \
 	else \
-		echo "redis container not found"; \
+		echo "No admin manager found"; \
 	fi
 
 # ==========================================

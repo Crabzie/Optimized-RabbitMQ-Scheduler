@@ -1,12 +1,6 @@
 #!/bin/bash
 set -e
 
-# Install redis-cli (Alpine)
-echo "Installing redis-cli..."
-apk add --no-cache redis > /dev/null 2>&1 || echo "redis-cli already available"
-
-REDIS_CMD="redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASS --no-auth-warning"
-
 CLUSTER_MEMBERS_KEY="rabbitmq:cluster:members"
 CLUSTER_MASTER_KEY="rabbitmq:cluster:master"
 NODE_HEARTBEAT_KEY="rabbitmq:node:${RABBITMQ_NODENAME}:heartbeat"
@@ -16,11 +10,35 @@ until rabbitmqctl status > /dev/null 2>&1; do
   sleep 2
 done
 
-echo "Waiting for Redis to be ready..."
-until $REDIS_CMD PING > /dev/null 2>&1; do
-  echo "Redis not ready, waiting..."
-  sleep 2
+echo "Waiting for Redis to be ready at $REDIS_HOST:$REDIS_PORT..."
+
+WAIT_COUNT=0
+MAX_WAIT=120
+
+until nc -z $REDIS_HOST $REDIS_PORT > /dev/null 2>&1; do
+  echo "Redis not ready, waiting... (attempt $WAIT_COUNT/$((MAX_WAIT/2)))"
+  ((WAIT_COUNT++))
+  
+  if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "ERROR: Redis not reachable after $MAX_WAIT seconds"
+    echo "Debugging info:"
+    echo "  REDIS_HOST: $REDIS_HOST"
+    echo "  REDIS_PORT: $REDIS_PORT"
+    echo "  Testing DNS:"
+    nslookup $REDIS_HOST || echo "  DNS lookup failed"
+    exit 1
+  fi
+  
+  sleep 1
 done
+
+echo "✓ Redis is reachable!"
+
+# Now install redis-cli for coordinator operations
+echo "Installing redis-cli for coordinator..."
+apk add --no-cache redis > /dev/null 2>&1 || true
+
+REDIS_CMD="redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASS --no-auth-warning"
 
 # REDIS CLUSTER STATE FUNCTIONS
 register_node() {

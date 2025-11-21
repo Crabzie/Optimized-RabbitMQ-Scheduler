@@ -11,10 +11,6 @@ COMPOSE_PROJECT_NAME=$(PROJECT_NAME)
 BINARY_SCHEDULER=scheduler
 BINARY_NODE=fog-node
 
-# Container discovery
-RABBITMQ1_CONTAINER=$(shell docker ps --filter "name=fog-scheduler_rabbitmq1" --format "{{.Names}}" | head -1)
-REDIS_CONTAINER=$(shell docker ps --filter "name=fog-scheduler_redis" --format "{{.Names}}" | head -1)
-
 # Default node
 NODE?=1
 NODE_ID?=node-$(NODE)
@@ -65,31 +61,54 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "rabbitmq1 ready" && exit 0; \
-		echo "waiting for rabbitmq1 ($$i/24)..."; \
+		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+			if docker exec $$MQ1_CONTAINER_ID rabbitmq-diagnostics ping >/dev/null 2>&1; then \
+				echo "RabbitMQ1 ready"; \
+				exit 0; \
+			fi; \
+		fi; \
+		echo "Waiting for rabbitmq1 ($$i/24)..."; \
 		sleep 5; \
-	done; echo "rabbitmq1 failed"; exit 1'
+	done; \
+	echo "RabbitMQ1 failed to start"; \
+	exit 1'
 	
 	@echo ""
 	@echo "Step 3: Starting RabbitMQ2..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq2 && echo "rabbitmq2 joined" && exit 0; \
-		printf "."; sleep 5; \
-	done; echo "rabbitmq2 failed"; exit 1'
+		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+			if docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
+				echo "RabbitMQ2 joined cluster"; \
+				exit 0; \
+			fi; \
+		fi; \
+		printf "."; \
+		sleep 5; \
+	done; \
+	echo "RabbitMQ2 failed to join cluster"; \
+	exit 1'
 	
 	@echo ""
 	@echo "Step 4: Starting RabbitMQ3..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq3 && echo "rabbitmq3 joined" && exit 0; \
-		printf "."; sleep 5; \
-	done; echo "rabbitmq3 failed"; exit 1'
+		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+			if docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
+				echo "RabbitMQ3 joined cluster"; \
+				exit 0; \
+			fi; \
+		fi; \
+		printf "."; \
+		sleep 5; \
+	done; \
+	echo "RabbitMQ3 failed to join cluster"; \
+	exit 1'
 	
 	@echo ""
 	@echo "All services started!"
@@ -125,17 +144,35 @@ status:
 health:
 	@echo "Service Health"
 	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
-		C=$$(docker ps -qf name=$(PROJECT_NAME)_$$svc); \
-		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "$$svc: healthy" || echo "$$svc: not healthy"; \
+		CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_$$svc --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+		if [ -n "$$CONTAINER_ID" ]; then \
+			docker exec $$CONTAINER_ID rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "$$svc: healthy" || echo "$$svc: not healthy"; \
+		else \
+			echo "$$svc: container not found"; \
+		fi; \
 	done
-	@C=$$(docker ps -qf name=$(PROJECT_NAME)_redis); \
-	[ -n "$$C" ] && docker exec $$C redis-cli -a $(REDIS_PASS) --no-auth-warning ping >/dev/null 2>&1 && echo "redis: healthy" || echo "redis: not healthy"
 	
 	@echo ""
-	@echo "Redis Coordinator"
-	@[ -n "$(REDIS_CONTAINER)" ] && echo -n "Members: " && docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' ' && echo "" || true
-	@[ -n "$(REDIS_CONTAINER)" ] && echo -n "Master:  " && docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null || true
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning ping >/dev/null 2>&1 && echo "redis: healthy" || echo "redis: not healthy"; \
+	else \
+		echo "redis: container not found"; \
+	fi
+	
 	@echo ""
+	@echo "=== Redis Coordinator ==="
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		echo -n "Members: "; \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' '; \
+		echo ""; \
+		echo -n "Master:  "; \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null; \
+		echo ""; \
+	else \
+		echo "Redis container not found"; \
+	fi
 
 # ==========================================
 # Development
@@ -160,7 +197,9 @@ build:
 	@go build -o ./bin/$(BINARY_NODE) ./cmd/node/main.go
 	@echo "Binaries in ./bin/"
 
+# ==========================================
 # Testing
+# ==========================================
 
 test:
 	@echo "Running tests..."
@@ -173,27 +212,46 @@ test-failover:
 	@sleep 90
 	@$(MAKE) rabbitmq
 
+# ==========================================
 # Logs
+# ==========================================
 
 logs:
-	@echo "Recent Logs"
+	@echo "=== Recent Logs ==="
 	@docker service logs $(PROJECT_NAME)_rabbitmq1 --tail 50
 	@docker service logs $(PROJECT_NAME)_redis --tail 30
 
 logs-follow:
 	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_rabbitmq2 $(PROJECT_NAME)_rabbitmq3 $(PROJECT_NAME)_redis
 
+# ==========================================
 # RabbitMQ
+# ==========================================
 
 rabbitmq:
-	@echo "Cluster Status"
-	@[ -n "$(RABBITMQ1_CONTAINER)" ] && docker exec $(RABBITMQ1_CONTAINER) rabbitmqctl cluster_status 2>/dev/null || echo "rabbitmq1 not running"
+	@echo "=== Cluster Status ==="
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		docker exec $$MQ1_CONTAINER_ID rabbitmqctl cluster_status 2>/dev/null; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 	@echo ""
-	@echo "Queues"
-	@[ -n "$(RABBITMQ1_CONTAINER)" ] && docker exec $(RABBITMQ1_CONTAINER) rabbitmqctl list_queues name messages consumers 2>/dev/null || echo "rabbitmq1 not running"
+	@echo "=== Queues ==="
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		docker exec $$MQ1_CONTAINER_ID rabbitmqctl list_queues name messages consumers 2>/dev/null; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 	@echo ""
-	@echo "Users"
-	@[ -n "$(RABBITMQ1_CONTAINER)" ] && docker exec $(RABBITMQ1_CONTAINER) rabbitmqctl list_users 2>/dev/null || echo "rabbitmq1 not running"
+	@echo "=== Users ==="
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		docker exec $$MQ1_CONTAINER_ID rabbitmqctl list_users 2>/dev/null; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 
 rabbitmq-ui:
 	@echo "Opening RabbitMQ Management UI..."
@@ -205,57 +263,113 @@ rabbitmq-ui:
 
 rabbitmq-purge:
 	@echo "Purge all queues? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@for q in tasks.high_priority tasks.normal tasks.low_priority; do \
-		docker exec $(RABBITMQ1_CONTAINER) rabbitmqctl purge_queue $$q --vhost /fog; \
-	done
-	@echo "Queues purged"
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		for q in tasks.high_priority tasks.normal tasks.low_priority; do \
+			docker exec $$MQ1_CONTAINER_ID rabbitmqctl purge_queue $$q --vhost /fog; \
+		done; \
+		echo "Queues purged"; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 
+# ==========================================
 # Redis
+# ==========================================
 
 redis:
-	@echo "Redis Info"
-	@[ -n "$(REDIS_CONTAINER)" ] && docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version || echo "redis not running"
+	@echo "=== Redis Info ==="
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version; \
+	else \
+		echo "redis container not found"; \
+	fi
 	@echo ""
-	@echo "Cluster State"
-	@[ -n "$(REDIS_CONTAINER)" ] && docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members || true
+	@echo "=== Cluster State ==="
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
+	else \
+		echo "redis container not found"; \
+	fi
 	@echo ""
-	@echo "All Keys"
-	@[ -n "$(REDIS_CONTAINER)" ] && docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS '*' || true
+	@echo "=== All Keys ==="
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS '*'; \
+	else \
+		echo "redis container not found"; \
+	fi
 
 redis-cli:
-	@docker exec -it $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS)
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec -it $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS); \
+	else \
+		echo "redis container not found"; \
+	fi
 
 redis-flush:
 	@echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning FLUSHALL
-	@echo "Redis flushed"
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
+		echo "Redis flushed"; \
+	else \
+		echo "redis container not found"; \
+	fi
 
 redis-clear-cluster:
 	@echo "Clear cluster state? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master
-	@docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $(REDIS_CONTAINER) redis-cli -a $(REDIS_PASS) --no-auth-warning DEL {}
-	@echo "Cluster state cleared"
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master; \
+		docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $$REDIS_CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning DEL {}; \
+		echo "Cluster state cleared"; \
+	else \
+		echo "redis container not found"; \
+	fi
 
+# ==========================================
 # Debug & Monitoring
+# ==========================================
 
 debug:
-	@echo "=== Stack Debug ==="
+	@echo "Stack Debug"
 	@docker stack ps $(PROJECT_NAME) --no-trunc
 	@echo ""
-	@echo "=== Container Logs ==="
-	@C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); [ -n "$$C" ] && docker logs $$C --tail 30 || echo "rabbitmq1 not running"
+	@echo "Container Logs"
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		docker logs $$MQ1_CONTAINER_ID --tail 30; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 
 monitor:
-	@echo "📊 Monitoring (CTRL+C to stop)..."
+	@echo "Monitoring (CTRL+C to stop)..."
 	@watch -n 2 '$(MAKE) health'
 
 inspect-rabbitmq:
-	@docker exec -it $(RABBITMQ1_CONTAINER) /bin/bash
+	@MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$MQ1_CONTAINER_ID" ]; then \
+		docker exec -it $$MQ1_CONTAINER_ID /bin/bash; \
+	else \
+		echo "rabbitmq1 container not found"; \
+	fi
 
 inspect-redis:
-	@docker exec -it $(REDIS_CONTAINER) /bin/sh
+	@REDIS_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_redis --filter "desired-state=running" --format "{{.ID}}" | head -1); \
+	if [ -n "$$REDIS_CONTAINER_ID" ]; then \
+		docker exec -it $$REDIS_CONTAINER_ID /bin/sh; \
+	else \
+		echo "redis container not found"; \
+	fi
 
+# ==========================================
 # Help
+# ==========================================
 
 help:
 	@echo "Fog Computing Scheduler - Essential Commands"

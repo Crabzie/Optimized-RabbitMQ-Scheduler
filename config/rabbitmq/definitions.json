@@ -1,0 +1,181 @@
+{
+  "vhosts": [
+    {
+      "name": "/fog"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "tasks.direct",
+      "vhost": "/fog",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "system.fanout",
+      "vhost": "/fog",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "results.topic",
+      "vhost": "/fog",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "metrics.topic",
+      "vhost": "/fog",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "dlx",
+      "vhost": "/fog",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false
+    }
+  ],
+  "queues": [
+    {
+      "name": "tasks.high_priority",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 10000,
+        "x-overflow": "reject-publish",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "tasks.high_priority.failed"
+      }
+    },
+    {
+      "name": "tasks.normal",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 10000,
+        "x-overflow": "reject-publish",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "tasks.normal.failed"
+      }
+    },
+    {
+      "name": "tasks.low_priority",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 10000,
+        "x-overflow": "reject-publish",
+        "x-delivery-limit": 3,
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "tasks.low_priority.failed"
+      }
+    },
+    {
+      "name": "results.success",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 50000,
+        "x-overflow": "drop-head"
+      }
+    },
+    {
+      "name": "results.failed",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 50000,
+        "x-overflow": "drop-head"
+      }
+    },
+    {
+      "name": "metrics.node",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-length": 100000,
+        "x-overflow": "drop-head"
+      }
+    },
+    {
+      "name": "dlq",
+      "vhost": "/fog",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "tasks.direct",
+      "vhost": "/fog",
+      "destination": "tasks.high_priority",
+      "destination_type": "queue",
+      "routing_key": "high_priority"
+    },
+    {
+      "source": "tasks.direct",
+      "vhost": "/fog",
+      "destination": "tasks.normal",
+      "destination_type": "queue",
+      "routing_key": "normal"
+    },
+    {
+      "source": "tasks.direct",
+      "vhost": "/fog",
+      "destination": "tasks.low_priority",
+      "destination_type": "queue",
+      "routing_key": "low_priority"
+    },
+    {
+      "source": "results.topic",
+      "vhost": "/fog",
+      "destination": "results.success",
+      "destination_type": "queue",
+      "routing_key": "results.success.#"
+    },
+    {
+      "source": "results.topic",
+      "vhost": "/fog",
+      "destination": "results.failed",
+      "destination_type": "queue",
+      "routing_key": "results.failed.#"
+    },
+    {
+      "source": "metrics.topic",
+      "vhost": "/fog",
+      "destination": "metrics.node",
+      "destination_type": "queue",
+      "routing_key": "metrics.node.#"
+    },
+    {
+      "source": "dlx",
+      "vhost": "/fog",
+      "destination": "dlq",
+      "destination_type": "queue",
+      "routing_key": "#"
+    }
+  ]
+}

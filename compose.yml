@@ -1,3 +1,5 @@
+version: "3.8"
+
 configs:
   rabbitmq_conf:
     file: ./config/rabbitmq/rabbitmq.conf
@@ -17,174 +19,69 @@ networks:
     driver: overlay
     attachable: true
 
+# Common Templates
+
+x-rabbitmq-common-env: &rabbitmq-common-env
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  REDIS_PASS: ${REDIS_PASS}
+  RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
+  MQ_ADMIN_USER: ${MQ_ADMIN_USER}
+  MQ_ADMIN_PASS: ${MQ_ADMIN_PASS}
+  MQ_NODE1_WORKER: ${MQ_NODE1_WORKER}
+  MQ_NODE1_PASS: ${MQ_NODE1_PASS}
+  MQ_NODE2_WORKER: ${MQ_NODE2_WORKER}
+  MQ_NODE2_PASS: ${MQ_NODE2_PASS}
+  MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
+  MQ_NODE3_PASS: ${MQ_NODE3_PASS}
+
+x-rabbitmq-base: &rabbitmq-base
+  image: rabbitmq:4.1.6-management-alpine
+  configs:
+    - source: rabbitmq_conf
+      target: /etc/rabbitmq/rabbitmq.conf
+      mode: 0444
+    - source: rabbitmq_definitions
+      target: /etc/rabbitmq/definitions.json
+      mode: 0444
+    - source: rabbitmq_init
+      target: /init.sh
+      mode: 0555
+  depends_on:
+      - redis
+  networks:
+    - fog-network
+  entrypoint: ["/bin/bash", "-c"]
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "ping"]
+    interval: 30s
+    timeout: 15s
+    retries: 5
+    start_period: 120s
+  deploy:
+    replicas: 1
+    restart_policy:
+          condition: on-failure
+          delay: 10s
+          max_attempts: 3
+          window: 120s
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 512M
+      reservations:
+        cpus: "0.5"
+        memory: 256M
+
+
+# Services
+
 services:
-  rabbitmq1:
-    hostname: rabbitmq1
-    image: rabbitmq:4.1.6-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_NODENAME: rabbit@rabbitmq1
-      CLUSTER_WITH: ""
-      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-      MQ_ADMIN_USER: ${MQ_ADMIN_USER}
-      MQ_ADMIN_PASS: ${MQ_ADMIN_PASS}
-      MQ_NODE1_WORKER: ${MQ_NODE1_WORKER}
-      MQ_NODE1_PASS: ${MQ_NODE1_PASS}
-      MQ_NODE2_WORKER: ${MQ_NODE2_WORKER}
-      MQ_NODE2_PASS: ${MQ_NODE2_PASS}
-      MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
-      MQ_NODE3_PASS: ${MQ_NODE3_PASS}
-    configs:
-      - source: rabbitmq_conf
-        target: /etc/rabbitmq/rabbitmq.conf
-        mode: 0444
-      - source: rabbitmq_definitions
-        target: /etc/rabbitmq/definitions.json
-        mode: 0444
-      - source: rabbitmq_init
-        target: /init.sh
-        mode: 0555
-    volumes:
-      - rabbitmq1_data:/var/lib/rabbitmq
-    networks:
-      - fog-network
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-        "rabbitmq-server &
-         sleep 10
-         /bin/bash /init.sh
-         wait"
-    # healthcheck:
-    #   test: ["CMD", "rabbitmq-diagnostics", "ping"]
-    #   interval: 25s
-    #   timeout: 15s
-    #   retries: 10
-    #   start_period: 90s
-    deploy:
-      replicas: 1
-      # placement:
-        # constraints: [node.labels.rabbitmq==1, node.role!=manager]
-      resources:
-        limits:
-          cpus: "0.7"
-          memory: 1G
-
-  rabbitmq2:
-    hostname: rabbitmq2
-    image: rabbitmq:4.1.6-management-alpine
-    ports:
-      - "5673:5672"
-      - "15673:15672"
-    # depends_on:
-    #   - rabbitmq1
-    environment:
-      RABBITMQ_NODENAME: rabbit@rabbitmq2
-      CLUSTER_WITH: "rabbit@rabbitmq1"
-      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-      MQ_ADMIN_USER: ${MQ_ADMIN_USER}
-      MQ_ADMIN_PASS: ${MQ_ADMIN_PASS}
-      MQ_NODE1_WORKER: ${MQ_NODE1_WORKER}
-      MQ_NODE1_PASS: ${MQ_NODE1_PASS}
-      MQ_NODE2_WORKER: ${MQ_NODE2_WORKER}
-      MQ_NODE2_PASS: ${MQ_NODE2_PASS}
-      MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
-      MQ_NODE3_PASS: ${MQ_NODE3_PASS}
-    configs:
-      - source: rabbitmq_conf
-        target: /etc/rabbitmq/rabbitmq.conf
-        mode: 0444
-      - source: rabbitmq_definitions
-        target: /etc/rabbitmq/definitions.json
-        mode: 0444
-      - source: rabbitmq_init
-        target: /init.sh
-        mode: 0555
-    volumes:
-      - rabbitmq2_data:/var/lib/rabbitmq
-    networks:
-      - fog-network
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-        "rabbitmq-server &
-         sleep 15
-         /bin/bash /init.sh
-         wait"
-    # healthcheck:
-    #   test: ["CMD", "bash", "-c", "rabbitmq-diagnostics ping && rabbitmqctl cluster_status | grep -q rabbit@rabbitmq1"]
-    #   interval: 25s
-    #   timeout: 15s
-    #   retries: 10
-    #   start_period: 90s
-    deploy:
-      replicas: 1
-      # placement:
-        # constraints: [node.labels.rabbitmq==2, node.role!=manager]
-      resources:
-        limits:
-          cpus: "0.7"
-          memory: 1G
-
-  rabbitmq3:
-    hostname: rabbitmq3
-    image: rabbitmq:4.1.6-management-alpine
-    ports:
-      - "5674:5672"
-      - "15674:15672"
-    # depends_on:
-    #   - rabbitmq1
-    environment:
-      RABBITMQ_NODENAME: rabbit@rabbitmq3
-      CLUSTER_WITH: "rabbit@rabbitmq1"
-      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-      MQ_ADMIN_USER: ${MQ_ADMIN_USER}
-      MQ_ADMIN_PASS: ${MQ_ADMIN_PASS}
-      MQ_NODE1_WORKER: ${MQ_NODE1_WORKER}
-      MQ_NODE1_PASS: ${MQ_NODE1_PASS}
-      MQ_NODE2_WORKER: ${MQ_NODE2_WORKER}
-      MQ_NODE2_PASS: ${MQ_NODE2_PASS}
-      MQ_NODE3_WORKER: ${MQ_NODE3_WORKER}
-      MQ_NODE3_PASS: ${MQ_NODE3_PASS}
-    configs:
-      - source: rabbitmq_conf
-        target: /etc/rabbitmq/rabbitmq.conf
-        mode: 0444
-      - source: rabbitmq_definitions
-        target: /etc/rabbitmq/definitions.json
-        mode: 0444
-      - source: rabbitmq_init
-        target: /init.sh
-        mode: 0555
-    volumes:
-      - rabbitmq3_data:/var/lib/rabbitmq
-    networks:
-      - fog-network
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-        "rabbitmq-server &
-         sleep 20
-         /bin/bash /init.sh
-         wait"
-    # healthcheck:
-    #   test: ["CMD", "bash", "-c", "rabbitmq-diagnostics ping && rabbitmqctl cluster_status | grep -q rabbit@rabbitmq1"]
-    #   interval: 25s
-    #   timeout: 15s
-    #   retries: 10
-    #   start_period: 90s      
-    deploy:
-      replicas: 1
-      # placement:
-        # constraints: [node.labels.rabbitmq==3, node.role!=manager]
-      resources:
-        limits:
-          cpus: "0.7"
-          memory: 1G
-
   redis:
+    hostname: ${REDIS_HOST}
     image: redis:latest
     ports:
-      - "6379:6379"
+      - "6379:${REDIS_PORT}"
     volumes:
       - redis_data:/data
     networks:
@@ -195,13 +92,73 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+      start_period: 10s
     deploy:
-      # placement:
-        # constraints: [node.labels.redis==1, node.role!=manager]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
       resources:
         limits:
-          cpus: "0.33"
+          cpus: "0.5"
           memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  rabbitmq1:
+    <<: *rabbitmq-base
+    hostname: rabbitmq1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      <<: *rabbitmq-common-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq1
+      CLUSTER_WITH: ""
+    volumes:
+      - rabbitmq1_data:/var/lib/rabbitmq
+    command: |
+      "rabbitmq-server &
+       sleep 10
+       /bin/bash /init.sh
+       wait"
+
+  rabbitmq2:
+    <<: *rabbitmq-base
+    hostname: rabbitmq2
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      <<: *rabbitmq-common-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq2
+      CLUSTER_WITH: "rabbit@rabbitmq1"
+    volumes:
+      - rabbitmq2_data:/var/lib/rabbitmq
+    command: |
+      "rabbitmq-server &
+       sleep 15
+       /bin/bash /init.sh
+       wait"
+
+  rabbitmq3:
+    <<: *rabbitmq-base
+    hostname: rabbitmq3
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+    environment:
+      <<: *rabbitmq-common-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq3
+      CLUSTER_WITH: "rabbit@rabbitmq1"
+    volumes:
+      - rabbitmq3_data:/var/lib/rabbitmq
+    command: |
+      "rabbitmq-server &
+       sleep 20
+       /bin/bash /init.sh
+       wait"  
 
   # scheduler:
   #   build: ./scheduler

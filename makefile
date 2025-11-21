@@ -11,6 +11,10 @@ COMPOSE_PROJECT_NAME=$(PROJECT_NAME)
 BINARY_SCHEDULER=scheduler
 BINARY_NODE=fog-node
 
+# admin container running on the manager
+ADMIN_CONTAINER = $(shell docker ps -qf "name=$(PROJECT_NAME)_rabbitmq-admin")
+
+
 # Default node
 NODE?=1
 NODE_ID?=node-$(NODE)
@@ -61,14 +65,14 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		MQ1_CONTAINER_ID=$$(docker service ps $(PROJECT_NAME)_rabbitmq1 --filter "desired-state=running" --format "{{.ID}}" | head -1); \
-		if [ -n "$$MQ1_CONTAINER_ID" ]; then \
-			if docker exec $$MQ1_CONTAINER_ID rabbitmq-diagnostics ping >/dev/null 2>&1; then \
-				echo "RabbitMQ1 ready"; \
-				exit 0; \
-			fi; \
+		MQ1_REPLICAS=$$(docker service ls --filter name=$(PROJECT_NAME)_rabbitmq1 --format "{{.Replicas}}"); \
+		if echo "$$REPLICAS" | grep -q "1/1"; then \
+			echo "RabbitMQ1 is running ($$i/24)"; \
+			sleep 30; \
+			echo "RabbitMQ1 ready!"; \
+			exit 0; \
 		fi; \
-		echo "Waiting for rabbitmq1 ($$i/24)..."; \
+		echo "Waiting for rabbitmq1 ($$i/24) - Current: $$REPLICAS"; \
 		sleep 5; \
 	done; \
 	echo "RabbitMQ1 failed to start"; \

@@ -127,7 +127,7 @@ services:
     command: |
       "rabbitmq-server &
        sleep 10
-       /bin/bash /init.sh
+       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
        wait"
 
   rabbitmq2:
@@ -145,7 +145,7 @@ services:
     command: |
       "rabbitmq-server &
        sleep 15
-       /bin/bash /init.sh
+       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
        wait"
 
   rabbitmq3:
@@ -163,7 +163,7 @@ services:
     command: |
       "rabbitmq-server &
        sleep 20
-       /bin/bash /init.sh
+       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
        wait"  
 
   # scheduler:

@@ -66,7 +66,7 @@ up:
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
 		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "✓ rabbitmq1 ready" && exit 0; \
+		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "rabbitmq1 ready" && exit 0; \
 		echo "waiting for rabbitmq1 ($$i/24)..."; \
 		sleep 5; \
 	done; echo "rabbitmq1 failed"; exit 1'
@@ -77,7 +77,7 @@ up:
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
 		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq2 && echo "✓ rabbitmq2 joined" && exit 0; \
+		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq2 && echo "rabbitmq2 joined" && exit 0; \
 		printf "."; sleep 5; \
 	done; echo "rabbitmq2 failed"; exit 1'
 	
@@ -87,7 +87,7 @@ up:
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
 		C=$$(docker ps -qf name=$(PROJECT_NAME)_rabbitmq1); \
-		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq3 && echo "✓ rabbitmq3 joined" && exit 0; \
+		[ -n "$$C" ] && docker exec $$C rabbitmqctl cluster_status 2>/dev/null | grep -q rabbit@rabbitmq3 && echo "rabbitmq3 joined" && exit 0; \
 		printf "."; sleep 5; \
 	done; echo "rabbitmq3 failed"; exit 1'
 	
@@ -126,10 +126,10 @@ health:
 	@echo "Service Health"
 	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
 		C=$$(docker ps -qf name=$(PROJECT_NAME)_$$svc); \
-		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "$$svc: ✓" || echo "$$svc: ✗"; \
+		[ -n "$$C" ] && docker exec $$C rabbitmq-diagnostics ping >/dev/null 2>&1 && echo "$$svc: healthy" || echo "$$svc: not healthy"; \
 	done
 	@C=$$(docker ps -qf name=$(PROJECT_NAME)_redis); \
-	[ -n "$$C" ] && docker exec $$C redis-cli -a $(REDIS_PASS) --no-auth-warning ping >/dev/null 2>&1 && echo "redis: ✓" || echo "redis: ✗"
+	[ -n "$$C" ] && docker exec $$C redis-cli -a $(REDIS_PASS) --no-auth-warning ping >/dev/null 2>&1 && echo "redis: healthy" || echo "redis: not healthy"
 	
 	@echo ""
 	@echo "Redis Coordinator"
@@ -142,11 +142,11 @@ health:
 # ==========================================
 
 dev-scheduler:
-	@echo "🔥 Starting scheduler with hot reload..."
+	@echo "Starting scheduler with hot reload..."
 	@cd cmd/scheduler && air
 
 dev-node:
-	@echo "🔥 Starting fog-node-$(NODE)..."
+	@echo "Starting fog-node-$(NODE)..."
 	@NODE_ID=$(NODE_ID) go run ./cmd/node/main.go
 
 # ==========================================

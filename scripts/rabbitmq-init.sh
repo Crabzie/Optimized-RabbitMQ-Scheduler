@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Install redis-cli (Alpine)
+echo "Installing redis-cli..."
+apk add --no-cache redis > /dev/null 2>&1 || echo "redis-cli already available"
+
 REDIS_CMD="redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASS --no-auth-warning"
 
 CLUSTER_MEMBERS_KEY="rabbitmq:cluster:members"

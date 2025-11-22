@@ -69,9 +69,9 @@ x-rabbitmq-base: &rabbitmq-base
       limits:
         cpus: "1.0"
         memory: 512M
-      reservations:
-        cpus: "0.5"
-        memory: 256M
+      # reservations:
+      #   cpus: "0.5"
+      #   memory: 256M
 
 # Services
 
@@ -89,7 +89,16 @@ services:
       - "6379:6379"
     networks:
       - fog-network
-    command: "redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --loglevel warning --requirepass ${REDIS_PASSWORD}"
+    command: 
+      - redis-server
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--requirepass"
+      - "${REDIS_PASS}"   
     # command: "redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASS}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
@@ -110,9 +119,9 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
-        reservations:
-          cpus: "0.5"
-          memory: 256M
+        # reservations:
+        #   cpus: "0.5"
+        #   memory: 256M
 
   rabbitmq1:
     <<: *rabbitmq-base

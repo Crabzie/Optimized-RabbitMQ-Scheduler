@@ -155,15 +155,15 @@ status:
 health:
 	@echo "Service Health"
 	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
-		CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_$$svc"); \
+		CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 		if [ -n "$$CONTAINER_ID" ]; then \
-			if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@$$svc ping >/dev/null 2>&1; then \
+			if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
 				echo "$$svc: healthy"; \
 			else \
 				echo "$$svc: not healthy"; \
 			fi; \
 		else \
-			echo "$$svc: container not found on host manager1"; \
+			echo "rabbitmq1: container not found on host manager1"; \
 		fi; \
 	done
 	@echo ""
@@ -179,7 +179,7 @@ health:
 	fi
 	@echo ""
 	@echo "Redis Coordinator"
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo -n "Members: "; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' ' || echo "Failed to fetch members"; \
@@ -188,7 +188,7 @@ health:
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null | tr '\n' ' ' || echo "Failed to fetch master"; \
 		echo ""; \
 	else \
-		echo "Admin container not found on host manager1"; \
+		echo "redis: container not found on host manager1"; \
 	fi
 
 # Development
@@ -242,7 +242,7 @@ rabbitmq:
 		echo "Users"; \
 		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 rabbitmq-ui:
@@ -262,7 +262,7 @@ rabbitmq-purge:
 		done; \
 		echo "Queues purged"; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 # Redis
@@ -278,7 +278,7 @@ redis:
 		echo "All Keys"; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning KEYS '*'; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 redis-cli:
@@ -287,7 +287,7 @@ redis-cli:
 		echo "Connecting to Redis CLI..."; \
 		docker exec -it -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 redis-flush:
@@ -297,7 +297,7 @@ redis-flush:
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning FLUSHALL; \
 		echo "Redis flushed"; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 redis-clear-cluster:
@@ -308,15 +308,12 @@ redis-clear-cluster:
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER sh -c 'redis-cli -h redis --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -r redis-cli -h redis --no-auth-warning DEL'; \
 		echo "Cluster state cleared"; \
 	else \
-		echo "Admin container (rabbitmq1) not found on host manager1"; \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
-# ==========================================
 # Debug & Monitoring
-# ==========================================
-
 debug:
-	@echo "=== Stack Debug Info ==="
+	@echo "Stack Debug Info"
 	@echo ""
 	@echo "Stack Services:"
 	@docker stack services $(PROJECT_NAME)
@@ -334,10 +331,7 @@ monitor:
 	@echo "Monitoring (CTRL+C to stop)..."
 	@watch -n 2 'make health'
 
-# ==========================================
 # Help
-# ==========================================
-
 help:
 	@echo "Fog Computing Scheduler - Essential Commands"
 	@echo ""

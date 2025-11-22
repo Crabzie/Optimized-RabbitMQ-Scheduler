@@ -49,8 +49,6 @@ x-rabbitmq-base: &rabbitmq-base
     - source: rabbitmq_init
       target: /init.sh
       mode: 0555
-  depends_on:
-      - redis
   networks:
     - fog-network
   entrypoint: ["/bin/bash", "-c"]

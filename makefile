@@ -54,6 +54,22 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=0 $(PROJECT_NAME)_rabbitmq2=0 $(PROJECT_NAME)_rabbitmq3=0
 	@sleep 10
 	@echo ""
+	@echo "Step 2: Waiting for Redis to be healthy..."
+	@bash -c 'for i in {1..60}; do \
+	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
+	  if [ -n "$$CONTAINER_ID" ]; then \
+	    if docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$CONTAINER_ID redis-cli --no-auth-warning PING >/dev/null 2>&1; then \
+	      echo "Redis is healthy!"; \
+	      exit 0; \
+	    fi; \
+	  fi; \
+	  printf "."; \
+	  sleep 2; \
+	done; \
+	echo ""; \
+	echo "ERROR: Redis failed to become healthy after 2 minutes"; \
+	exit 1'
+	@echo ""
 	@echo "Step 2: Starting RabbitMQ1 (master)..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 25

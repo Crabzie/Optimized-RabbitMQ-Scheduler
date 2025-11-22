@@ -78,7 +78,7 @@ x-rabbitmq-base: &rabbitmq-base
 services:
   redis:
     hostname: redis
-    image: redis:8.4.0-alpine
+    image: redis:latest
     configs:
       - source: redis_conf
         target: /etc/redis/redis.conf
@@ -108,10 +108,10 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 640M
+          memory: 512M
         reservations:
           cpus: "0.5"
-          memory: 384M
+          memory: 256M
 
   rabbitmq1:
     <<: *rabbitmq-base

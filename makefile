@@ -75,13 +75,12 @@ up:
 	done; \
 	echo "RabbitMQ1 failed to start"; \
 	exit 1'
-	
 	@echo ""
 	@echo "Step 3: Starting RabbitMQ2..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		if exec exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
+		if docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
 			echo "RabbitMQ2 joined cluster"; \
 			exit 0; \
 		fi; \
@@ -226,7 +225,7 @@ rabbitmq:
 	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null; \
 	@echo ""
 	@echo "Users"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null; \
+	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null;
 
 rabbitmq-ui:
 	@echo "Opening RabbitMQ Management UI..."
@@ -238,10 +237,10 @@ rabbitmq-ui:
 
 rabbitmq-purge:
 	@echo "Purge all queues? [y/N]" && read ans && [ $${ans:-N} = y ]
-	for q in tasks.high_priority tasks.normal tasks.low_priority; do \
+	@for q in tasks.high_priority tasks.normal tasks.low_priority; do \
 		docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
-	done; \
-	echo "Queues purged"; \
+	done
+	@echo "Queues purged"
 
 # ==========================================
 # Redis
@@ -255,21 +254,21 @@ redis:
 	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
 	@echo ""
 	@echo "All Keys"
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS '*'; \
+	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS '*';
 
 redis-cli:
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS); \
+	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS);
 
 redis-flush:
 	@echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]
 	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
-	echo "Redis flushed"; \
+	echo "Redis flushed";
 
 redis-clear-cluster:
 	@echo "Clear cluster state? [y/N]" && read ans && [ $${ans:-N} = y ]
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master; \
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL {}; \
-	echo "Cluster state cleared"; \
+	@docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master
+	@docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL {}
+	@echo "Cluster state cleared"
 
 # ==========================================
 # Debug & Monitoring
@@ -278,12 +277,6 @@ redis-clear-cluster:
 monitor:
 	@echo "Monitoring (CTRL+C to stop)..."
 	@watch -n 2 '$(MAKE) health'
-
-inspect-rabbitmq:
-	docker exec $(docker ps -qf "name=admin") -it $(ADMIN_CONTAINER) /bin/bash; \
-
-inspect-redis:
-	docker exec $(docker ps -qf "name=admin") -it $(ADMIN_CONTAINER) /bin/sh; \
 
 # ==========================================
 # Help

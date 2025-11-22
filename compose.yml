@@ -89,7 +89,8 @@ services:
       - "6379:6379"
     networks:
       - fog-network
-    command: "redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASS}"
+    command: "redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --loglevel warning --requirepass ${REDIS_PASSWORD}"
+    # command: "redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASS}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s

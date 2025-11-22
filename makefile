@@ -62,7 +62,7 @@ up:
 	@echo ""
 	@echo "Step 2: Starting RabbitMQ1 (master)..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
-	@sleep 60
+	@sleep 25
 	@bash -c 'for i in {1..24}; do \
 	  if docker exec $$(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
 	    echo "RabbitMQ1 ready"; \
@@ -77,7 +77,7 @@ up:
 	@echo ""
 	@echo "Step 3: Starting RabbitMQ2..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
-	@sleep 60
+	@sleep 25
 	@bash -c 'for i in {1..24}; do \
 	  if docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
 	    echo "RabbitMQ2 joined cluster"; \
@@ -92,7 +92,7 @@ up:
 	@echo ""
 	@echo "Step 4: Starting RabbitMQ3..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
-	@sleep 60
+	@sleep 25
 	@bash -c 'for i in {1..24}; do \
 	  if docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
 	    echo "RabbitMQ3 joined cluster"; \

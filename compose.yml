@@ -78,7 +78,7 @@ x-rabbitmq-base: &rabbitmq-base
 services:
   redis:
     hostname: redis
-    image: redis:latest
+    image: redis:8.4.0-alpine
     configs:
       - source: redis_conf
         target: /etc/redis/redis.conf

@@ -7,12 +7,14 @@ configs:
     file: ./config/rabbitmq/definitions.json
   rabbitmq_init:
     file: ./scripts/rabbitmq-init.sh
-
+    
 volumes:
   rabbitmq1_data:
   rabbitmq2_data:
   rabbitmq3_data:
-  redis_data:
+  redis1_data:
+  redis2_data:
+  redis3_data:
 
 networks:
   fog-network:
@@ -59,9 +61,6 @@ x-rabbitmq-base: &rabbitmq-base
     retries: 5
     start_period: 120s
   deploy:
-    placement:
-        constraints:
-          - node.role == worker
     replicas: 1
     restart_policy:
           condition: on-failure
@@ -82,10 +81,10 @@ services:
   redis:
     hostname: redis
     image: redis:latest
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
     networks:
       - fog-network
     command: "redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --loglevel warning --requirepass ${REDIS_PASS}"
@@ -98,7 +97,7 @@ services:
     deploy:
       placement:
           constraints:
-            - node.role == worker
+            - node.hostname == manager1
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -115,11 +114,14 @@ services:
     <<: *rabbitmq-base
     hostname: rabbitmq1
     ports:
-      - "5672:5672"
       - "15672:15672"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq1
+    deploy:
+      placement:
+          constraints:
+            - node.hostname== manager1
       CLUSTER_WITH: ""
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
@@ -133,12 +135,15 @@ services:
     <<: *rabbitmq-base
     hostname: rabbitmq2
     ports:
-      - "5673:5672"
       - "15673:15672"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq2
       CLUSTER_WITH: "rabbit@rabbitmq1"
+    deploy:
+      placement:
+          constraints:
+            - node.hostname == manager2
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
     command: |
@@ -151,12 +156,15 @@ services:
     <<: *rabbitmq-base
     hostname: rabbitmq3
     ports:
-      - "5674:5672"
       - "15674:15672"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq3
       CLUSTER_WITH: "rabbit@rabbitmq1"
+    deploy:
+      placement:
+          constraints:
+            - node.hostname == manager3
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
     command: |
@@ -164,27 +172,6 @@ services:
        sleep 20
        /bin/bash /init.sh 2>&1 | tee /var/log/init.log
        wait"
-
-  rabbitmq-admin:
-    image: rabbitmq:4.1.6-management-alpine
-    hostname: rabbitmq-admin
-    networks:
-      - fog-network
-    environment:
-      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-    deploy:
-      mode: global
-      placement:
-        constraints:
-          - node.role == manager
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128M
-        reservations:
-          cpus: "0.1"
-          memory: 64M
-    command: sleep infinity
 
   # scheduler:
   #   build: ./scheduler

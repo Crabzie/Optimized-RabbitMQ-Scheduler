@@ -12,7 +12,7 @@ BINARY_SCHEDULER=scheduler
 BINARY_NODE=fog-node
 
 # admin container running on the manager
-ADMIN_CONTAINER = $(shell docker ps -qf "name=$(PROJECT_NAME)_rabbitmq-admin")
+ADMIN_CONTAINER = $(shell docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1")
 
 
 # Default node

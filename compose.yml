@@ -118,11 +118,11 @@ services:
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq1
+      CLUSTER_WITH: ""
     deploy:
       placement:
           constraints:
             - node.hostname== manager1
-      CLUSTER_WITH: ""
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
     command: |

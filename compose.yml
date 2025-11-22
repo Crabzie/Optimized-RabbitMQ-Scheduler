@@ -7,8 +7,8 @@ configs:
     file: ./config/rabbitmq/definitions.json
   rabbitmq_init:
     file: ./scripts/rabbitmq-init.sh
-  # redis_conf:
-  #   file: ./config/redis/redis.conf
+  redis_conf:
+    file: ./config/redis/redis.conf
     
 volumes:
   rabbitmq1_data:
@@ -69,9 +69,9 @@ x-rabbitmq-base: &rabbitmq-base
       limits:
         cpus: "1.0"
         memory: 512M
-      # reservations:
-      #   cpus: "0.5"
-      #   memory: 256M
+      reservations:
+        cpus: "0.5"
+        memory: 256M
 
 # Services
 
@@ -79,10 +79,10 @@ services:
   redis:
     hostname: redis
     image: redis:6.2-bullseye
-    # configs:
-    #   - source: redis_conf
-    #     target: /etc/redis/redis.conf
-    #     mode: 0444
+    configs:
+      - source: redis_conf
+        target: /etc/redis/redis.conf
+        mode: 0444
     volumes:
       - redis_data:/data
     ports:
@@ -99,7 +99,6 @@ services:
       - "allkeys-lru"
       - "--requirepass"
       - "${REDIS_PASS}"   
-    # command: "redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASS}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s
@@ -119,9 +118,9 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
-        # reservations:
-        #   cpus: "0.5"
-        #   memory: 256M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
 
   rabbitmq1:
     <<: *rabbitmq-base

@@ -64,12 +64,12 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-	if docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+	  if docker exec $$(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
 	    echo "RabbitMQ1 ready"; \
 	    exit 0; \
 	  else \
 	    printf "."; \
-	    sleep 5; \
+	    sleep 10; \
 	  fi; \
 	done; \
 	echo "RabbitMQ1 failed to start"; \
@@ -79,12 +79,12 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-	if docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
+	  if docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
 	    echo "RabbitMQ2 joined cluster"; \
 	    exit 0; \
 	  else \
 	    printf "."; \
-	    sleep 5; \
+	    sleep 10; \
 	  fi; \
 	done; \
 	echo "RabbitMQ2 failed to join cluster"; \
@@ -94,15 +94,15 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-	if docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
-	    echo "RabbitMQ1 ready"; \
+	  if docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
+	    echo "RabbitMQ3 joined cluster"; \
 	    exit 0; \
 	  else \
 	    printf "."; \
-	    sleep 5; \
+	    sleep 10; \
 	  fi; \
 	done; \
-	echo "RabbitMQ1 failed to start"; \
+	echo "RabbitMQ3 failed to join cluster"; \
 	exit 1'
 	@echo ""
 	@echo "All services started!"
@@ -138,7 +138,7 @@ status:
 health:
 	@echo "Service Health"
 	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
-		if  docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@$$svc ping >/dev/null 2>&1; then \
+		if  docker exec $$(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@$$svc ping >/dev/null 2>&1; then \
 			echo "$$svc: healthy"; \
 		else \
 			echo "$$svc: not healthy"; \
@@ -146,7 +146,7 @@ health:
 	done
 	@echo ""
 	
-	if docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a ${REDIS_PASS} --no-auth-warning ping >/dev/null 2>&1; then \
+	if docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a ${REDIS_PASS} --no-auth-warning ping >/dev/null 2>&1; then \
 		echo "redis: healthy"; \
 	else \
 		echo "redis: not healthy"; \
@@ -156,10 +156,10 @@ health:
 	@echo "Redis Coordinator"
 	
 	echo -n "Members: "; \
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' '; \
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' '; \
 	echo ""; \
 	echo -n "Master:  "; \
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null; \
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null; \
 	echo "";
 
 # ==========================================
@@ -218,13 +218,13 @@ logs-follow:
 
 rabbitmq:
 	@echo "Cluster Status"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null;
+	docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null;
 	@echo ""
 	@echo "Queues"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null;
+	docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null;
 	@echo ""
 	@echo "Users"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null;
+	docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null;
 
 rabbitmq-ui:
 	@echo "Opening RabbitMQ Management UI..."
@@ -237,7 +237,7 @@ rabbitmq-ui:
 rabbitmq-purge:
 	@echo "Purge all queues? [y/N]" && read ans && [ $${ans:-N} = y ]
 	@for q in tasks.high_priority tasks.normal tasks.low_priority; do \
-		docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
+		docker exec $$(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
 	done
 	@echo "Queues purged"
 
@@ -247,26 +247,26 @@ rabbitmq-purge:
 
 redis:
 	@echo "=== Redis Info ==="
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version; \
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning INFO server | grep redis_version; \
 	@echo ""
 	@echo "Cluster State"
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning SMEMBERS rabbitmq:cluster:members; \
 	@echo ""
 	@echo "All Keys"
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS '*';
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS '*';
 
 redis-cli:
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS);
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS);
 
 redis-flush:
 	@echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]
-	docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
+	docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning FLUSHALL; \
 	echo "Redis flushed";
 
 redis-clear-cluster:
 	@echo "Clear cluster state? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master
-	@docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL {}
+	@docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master
+	@docker exec $$(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -I {} docker exec $(docker ps -qf "name=admin") redis-cli -h redis -a $(REDIS_PASS) --no-auth-warning DEL {}
 	@echo "Cluster state cleared"
 
 # ==========================================

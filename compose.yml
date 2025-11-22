@@ -76,7 +76,6 @@ x-rabbitmq-base: &rabbitmq-base
         cpus: "0.5"
         memory: 256M
 
-
 # Services
 
 services:

@@ -123,6 +123,7 @@ up:
 	@echo ""
 	@echo "All services started!"
 	@$(MAKE) status
+	@$(MAKE) health
 
 down:
 	@echo "Stopping services..."
@@ -184,7 +185,7 @@ health:
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning SMEMBERS rabbitmq:cluster:members 2>/dev/null | tr '\n' ' ' || echo "Failed to fetch members"; \
 		echo ""; \
 		echo -n "Master:  "; \
-		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning SMEMBERS rabbitmq:cluster:master 2>/dev/null | tr '\n' ' ' || echo "Failed to fetch master"; \
+		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning GET rabbitmq:cluster:master 2>/dev/null | tr '\n' ' ' || echo "Failed to fetch master"; \
 		echo ""; \
 	else \
 		echo "Admin container not found on host manager1"; \

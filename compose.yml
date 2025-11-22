@@ -7,14 +7,14 @@ configs:
     file: ./config/rabbitmq/definitions.json
   rabbitmq_init:
     file: ./scripts/rabbitmq-init.sh
+  redis_conf:
+    file: ./config/redis/redis.conf
     
 volumes:
   rabbitmq1_data:
   rabbitmq2_data:
   rabbitmq3_data:
-  redis1_data:
-  redis2_data:
-  redis3_data:
+  redis_data:
 
 networks:
   fog-network:
@@ -81,13 +81,17 @@ services:
   redis:
     hostname: redis
     image: redis:latest
+    configs:
+      - source: redis_conf
+        target: /etc/redis/redis.conf
+        mode: 0444
     volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
     networks:
       - fog-network
-    command: "redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --loglevel warning --requirepass ${REDIS_PASS}"
+    command: "redis-server /etc/redis/redis.conf"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s
@@ -102,13 +106,14 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+        window: 120s
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: 640M
         reservations:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.5"
+          memory: 384M
 
   rabbitmq1:
     <<: *rabbitmq-base

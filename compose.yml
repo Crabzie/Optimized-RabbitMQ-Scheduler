@@ -91,7 +91,7 @@ services:
       - "6379:6379"
     networks:
       - fog-network
-    command: "redis-server /etc/redis/redis.conf"
+    command: "redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASS}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s

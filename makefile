@@ -59,19 +59,18 @@ up:
 	@docker stack deploy -c compose.yml $(PROJECT_NAME)
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=0 $(PROJECT_NAME)_rabbitmq2=0 $(PROJECT_NAME)_rabbitmq3=0
 	@sleep 10
-	
 	@echo ""
 	@echo "Step 2: Starting RabbitMQ1 (master)..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		if docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
-			echo "RabbitMQ1 ready"; \
-			sleep 5; \
-			exit 0; \
-		fi; \
-		printf "."; \
-		sleep 5; \
+	if docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+	    echo "RabbitMQ1 ready"; \
+	    exit 0; \
+	  else \
+	    printf "."; \
+	    sleep 5; \
+	  fi; \
 	done; \
 	echo "RabbitMQ1 failed to start"; \
 	exit 1'
@@ -80,31 +79,31 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		if docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
-			echo "RabbitMQ2 joined cluster"; \
-			exit 0; \
-		fi; \
-		printf "."; \
-		sleep 5; \
+	if docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
+	    echo "RabbitMQ2 joined cluster"; \
+	    exit 0; \
+	  else \
+	    printf "."; \
+	    sleep 5; \
+	  fi; \
 	done; \
 	echo "RabbitMQ2 failed to join cluster"; \
 	exit 1'
-	
 	@echo ""
 	@echo "Step 4: Starting RabbitMQ3..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
-		if docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
-			echo "RabbitMQ3 joined cluster"; \
-			exit 0; \
-		fi; \
-		printf "."; \
-		sleep 5; \
+	if docker exec $(docker ps -qf "name=admin") rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+	    echo "RabbitMQ1 ready"; \
+	    exit 0; \
+	  else \
+	    printf "."; \
+	    sleep 5; \
+	  fi; \
 	done; \
-	echo "RabbitMQ3 failed to join cluster"; \
+	echo "RabbitMQ1 failed to start"; \
 	exit 1'
-	
 	@echo ""
 	@echo "All services started!"
 	@$(MAKE) status
@@ -219,10 +218,10 @@ logs-follow:
 
 rabbitmq:
 	@echo "Cluster Status"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null; \
+	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null;
 	@echo ""
 	@echo "Queues"
-	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null; \
+	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null;
 	@echo ""
 	@echo "Users"
 	docker exec $(docker ps -qf "name=admin") rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null;
@@ -297,7 +296,7 @@ help:
 	@echo "  make dev-node NODE=1   Run fog node locally"
 	@echo "  make build             Build binaries"
 	@echo "  make test              Run tests"
-	@echo ""
+	@echo "" 
 	@echo "RabbitMQ:"
 	@echo "  make rabbitmq          Show cluster/queues/users"
 	@echo "  make rabbitmq-ui       Open management UI"

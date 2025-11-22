@@ -78,7 +78,7 @@ x-rabbitmq-base: &rabbitmq-base
 services:
   redis:
     hostname: redis
-    image: redis:6.2-bullseye
+    image: redis:latest
     configs:
       - source: redis_conf
         target: /etc/redis/redis.conf

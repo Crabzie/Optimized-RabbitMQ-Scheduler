@@ -7,8 +7,6 @@ configs:
     file: ./config/rabbitmq/definitions.json
   rabbitmq_init:
     file: ./scripts/rabbitmq-init.sh
-  redis_conf:
-    file: ./config/redis/redis.conf
   postgres_conf:
     file: ./config/postgres/postgresql.conf
     
@@ -82,21 +80,13 @@ services:
   redis:
     hostname: redis
     image: redis:latest
-    configs:
-      - source: redis_conf
-        target: /etc/redis/redis.conf
-        mode: 0444
     volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
     networks:
       - fog-network
-    command: 
-      - redis-server
-      - "/etc/redis/redis.conf"
-      - "--requirepass"
-      - "${REDIS_PASS}"
+    command: "redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --loglevel warning --requirepass ${REDIS_PASSWORD}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s

@@ -18,9 +18,11 @@ NODE_ID?=node-$(NODE)
 .PHONY: all install deps \
 	up down restart clean status health \
 	dev-scheduler dev-node \
-	build test \
+	build test test-failover \
 	logs logs-follow \
-	rabbitmq redis \
+	rabbitmq rabbitmq-cli rabbitmq-ui rabbitmq-purge \
+	redis redlis-cli redis-flush redis-clear-cluster \
+	postgres postgres-cli postgres-drop-db postgres-create-db \
 	debug monitor \
 	help
 
@@ -51,7 +53,23 @@ up:
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=0 $(PROJECT_NAME)_rabbitmq2=0 $(PROJECT_NAME)_rabbitmq3=0
 	@sleep 10
 	@echo ""
-	@echo "Step 2: Waiting for Redis to be healthy..."
+	@echo "Step 2: Waiting for PostgreSQL to be healthy..."
+	@bash -c 'for i in {1..60}; do \
+	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	  if [ -n "$$CONTAINER_ID" ]; then \
+	    if docker exec $$CONTAINER_ID pg_isready -U $(PG_USER) -d schedulerdb >/dev/null 2>&1; then \
+	      echo "PostgreSQL is healthy!"; \
+	      exit 0; \
+	    fi; \
+	  fi; \
+	  printf "."; \
+	  sleep 2; \
+	done; \
+	echo ""; \
+	echo "ERROR: PostgreSQL failed to become healthy after 2 minutes"; \
+	exit 1'
+	@echo ""
+	@echo "Step 3: Waiting for Redis to be healthy..."
 	@bash -c 'for i in {1..60}; do \
 	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
@@ -67,7 +85,7 @@ up:
 	echo "ERROR: Redis failed to become healthy after 2 minutes"; \
 	exit 1'
 	@echo ""
-	@echo "Step 3: Starting RabbitMQ1 (master)..."
+	@echo "Step 4: Starting RabbitMQ1 (master)..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
@@ -85,7 +103,7 @@ up:
 	echo "RabbitMQ1 failed to start"; \
 	exit 1'
 	@echo ""
-	@echo "Step 4: Starting RabbitMQ2..."
+	@echo "Step 5: Starting RabbitMQ2..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
@@ -103,7 +121,7 @@ up:
 	echo "RabbitMQ2 failed to join cluster"; \
 	exit 1'
 	@echo ""
-	@echo "Step 5: Starting RabbitMQ3..."
+	@echo "Step 6: Starting RabbitMQ3..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
 	@sleep 60
 	@bash -c 'for i in {1..24}; do \
@@ -190,6 +208,17 @@ health:
 	else \
 		echo "redis: container not found on host manager1"; \
 	fi
+	@echo ""
+	@PG_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	if [ -n "$$PG_CONTAINER" ]; then \
+		if docker exec $$PG_CONTAINER pg_isready -U $(PG_USER) -d schedulerdb >/dev/null 2>&1; then \
+			echo "postgres: healthy"; \
+		else \
+			echo "postgres: not healthy"; \
+		fi; \
+	else \
+		echo "postgres: container not found on host manager1"; \
+	fi
 
 # Development
 dev-scheduler:
@@ -225,9 +254,10 @@ logs:
 	@echo "Recent Logs"
 	@docker service logs $(PROJECT_NAME)_rabbitmq1 --tail 50
 	@docker service logs $(PROJECT_NAME)_redis --tail 30
+	@docker service logs $(PROJECT_NAME)_postgres --tail 50
 
 logs-follow:
-	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_rabbitmq2 $(PROJECT_NAME)_rabbitmq3 $(PROJECT_NAME)_redis
+	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_rabbitmq2 $(PROJECT_NAME)_rabbitmq3 $(PROJECT_NAME)_redis $(PROJECT_NAME)_postgres
 
 # RabbitMQ
 rabbitmq:
@@ -244,6 +274,15 @@ rabbitmq:
 	else \
 		echo "rabbitmq1: container not found on host manager1"; \
 		exit 1; \
+	fi
+
+rabbitmq-cli:
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	if [ -n "$$ADMIN_CONTAINER" ]; then \
+		echo "Connecting to rabbitmq1 CLI..."; \
+		docker exec -it $$ADMIN_CONTAINER bash || docker exec -it $$ADMIN_CONTAINER sh; \
+	else \
+		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 rabbitmq-ui:
@@ -316,6 +355,45 @@ redis-clear-cluster:
 		echo "redis: container not found on host manager1"; \
 	fi
 
+# PostgreSQL
+postgres:
+	@PG_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	if [ -n "$$PG_CONTAINER" ]; then \
+		echo "PostgreSQL Info"; \
+		docker exec $$PG_CONTAINER psql -U $(PG_USER) -d schedulerdb -c "SELECT version();" 2>/dev/null || echo "Failed to get PostgreSQL version"; \
+		echo ""; \
+		echo "Databases"; \
+		docker exec $$PG_CONTAINER psql -U $(PG_USER) -d postgres -c "\l" 2>/dev/null || echo "Failed to list databases"; \
+	else \
+		echo "postgres: container not found on host manager1"; \
+	fi
+
+postgres-cli:
+	@PG_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	if [ -n "$$PG_CONTAINER" ]; then \
+		echo "Connecting to PostgreSQL CLI..."; \
+		docker exec -it $$PG_CONTAINER psql -U $(PG_USER) -d schedulerdb; \
+	else \
+		echo "postgres: container not found on host manager1"; \
+	fi
+postgres-drop-db:
+	@PG_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	if [ -n "$$PG_CONTAINER" ]; then \
+		echo "Drop schedulerdb? [y/N]" && read ans && [ $${ans:-N} = y ] && \
+		docker exec $$PG_CONTAINER psql -U $(PG_USER) -d postgres -c "DROP DATABASE IF EXISTS schedulerdb;" && \
+		echo "schedulerdb dropped" || echo "Drop cancelled"; \
+	else \
+		echo "postgres: container not found on host manager1"; \
+	fi
+
+postgres-create-db:
+	@PG_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	if [ -n "$$PG_CONTAINER" ]; then \
+		docker exec $$PG_CONTAINER psql -U $(PG_USER) -d postgres -c "CREATE DATABASE schedulerdb;" 2>/dev/null || echo "schedulerdb may already exist"; \
+	else \
+		echo "postgres: container not found on host manager1"; \
+	fi
+
 # Debug & Monitoring
 debug:
 	@echo "Stack Debug Info"
@@ -355,6 +433,7 @@ help:
 	@echo "" 
 	@echo "RabbitMQ:"
 	@echo "  make rabbitmq          Show cluster/queues/users"
+	@echo "  make rabbitmq-cli      Open postgreSQL CLI"
 	@echo "  make rabbitmq-ui       Open management UI"
 	@echo "  make rabbitmq-purge    Purge all queues"
 	@echo ""
@@ -363,6 +442,12 @@ help:
 	@echo "  make redis-cli         Open Redis CLI"
 	@echo "  make redis-flush       Delete all data"
 	@echo "  make redis-clear-cluster    Clear cluster state"
+	@echo ""
+	@echo "PostgreSQL:"
+	@echo "  make postgres          Show PG version and databases"
+	@echo "  make postgres-cli      Open psql shell"
+	@echo "  make postgres-create-db   Create schedulerdb"
+	@echo "  make postgres-drop-db     Drop schedulerdb"
 	@echo ""
 	@echo "Logs & Debug:"
 	@echo "  make logs              Recent logs"

@@ -9,12 +9,15 @@ configs:
     file: ./scripts/rabbitmq-init.sh
   redis_conf:
     file: ./config/redis/redis.conf
+  postgres_conf:
+    file: ./config/postgres/postgresql.conf
     
 volumes:
   rabbitmq1_data:
   rabbitmq2_data:
   rabbitmq3_data:
   redis_data:
+  postgres_data:
 
 networks:
   fog-network:
@@ -91,14 +94,7 @@ services:
       - fog-network
     command: 
       - redis-server
-      - "--appendonly"
-      - "yes"
-      - "--maxmemory"
-      - "512mb"
-      - "--maxmemory-policy"
-      - "allkeys-lru"
-      - "--requirepass"
-      - "${REDIS_PASS}"   
+      - "/etc/redis/redis.conf"   
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s
@@ -121,6 +117,50 @@ services:
         reservations:
           cpus: "0.5"
           memory: 256M
+
+  postgres:
+    image: postgres:latest
+    hostname: postgres
+    environment:
+      POSTGRES_DB: schedulerdb
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASS}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    configs:
+      - source: postgres_conf
+        target: /etc/postgresql/postgresql.conf
+        mode: 0444
+    networks:
+      - fog-network
+    ports:
+      - "5432:5432"
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d schedulerdb"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
 
   rabbitmq1:
     <<: *rabbitmq-base

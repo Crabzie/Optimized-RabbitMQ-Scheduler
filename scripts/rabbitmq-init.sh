@@ -40,35 +40,55 @@ apk add --no-cache redis > /dev/null 2>&1 || true
 
 REDIS_CMD="redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASS --no-auth-warning"
 
+# REDIS RETRY WRAPPER
+redis_retry() {
+  local max_attempts=10
+  local attempt=1
+  local delay=3
+  
+  while [ $attempt -le $max_attempts ]; do
+    if $REDIS_CMD "$@" 2>/dev/null; then
+      return 0
+    fi
+    
+    echo "Redis command failed (attempt $attempt/$max_attempts), retrying in ${delay}s..."
+    sleep $delay
+    ((attempt++))
+  done
+  
+  echo "ERROR: Redis command failed after $max_attempts attempts"
+  return 1
+}
+
 # REDIS CLUSTER STATE FUNCTIONS
 register_node() {
   echo "Registering $RABBITMQ_NODENAME in Redis..."
-  $REDIS_CMD SADD $CLUSTER_MEMBERS_KEY "$RABBITMQ_NODENAME"
-  $REDIS_CMD SETEX $NODE_HEARTBEAT_KEY 90 "$(date +%s)"
+  redis_retry SADD $CLUSTER_MEMBERS_KEY "$RABBITMQ_NODENAME" || exit 1
+  redis_retry SETEX $NODE_HEARTBEAT_KEY 90 "$(date +%s)" || exit 1
   echo "Node registered in redis"
 }
 
 unregister_node() {
   echo "Unregistering $RABBITMQ_NODENAME from Redis..."
-  $REDIS_CMD SREM $CLUSTER_MEMBERS_KEY "$RABBITMQ_NODENAME"
-  $REDIS_CMD DEL $NODE_HEARTBEAT_KEY
+  redis_retry SREM $CLUSTER_MEMBERS_KEY "$RABBITMQ_NODENAME"
+  redis_retry DEL $NODE_HEARTBEAT_KEY
   echo "Node unregistered from redis"
 }
 
 get_active_members() {
-  # Get all members from Redis
-  ALL_MEMBERS=$($REDIS_CMD SMEMBERS $CLUSTER_MEMBERS_KEY)
+  ALL_MEMBERS=$(redis_retry SMEMBERS $CLUSTER_MEMBERS_KEY) || {
+    echo "ERROR: Cannot get cluster members from Redis"
+    return 1
+  }
   
-  # Check which ones have recent heartbeat
   ACTIVE_MEMBERS=""
   for member in $ALL_MEMBERS; do
     HEARTBEAT_KEY="rabbitmq:node:${member}:heartbeat"
-    if $REDIS_CMD EXISTS $HEARTBEAT_KEY > /dev/null; then
+    if redis_retry EXISTS $HEARTBEAT_KEY > /dev/null 2>&1; then
       ACTIVE_MEMBERS="$ACTIVE_MEMBERS $member"
     else
-      # Stale entry, remove it
-      echo "Removing stale member from redis: $member"
-      $REDIS_CMD SREM $CLUSTER_MEMBERS_KEY "$member"
+      echo "Removing stale member: $member"
+      redis_retry SREM $CLUSTER_MEMBERS_KEY "$member" || true
     fi
   done
   
@@ -76,14 +96,16 @@ get_active_members() {
 }
 
 get_cluster_master() {
-  MASTER=$($REDIS_CMD GET $CLUSTER_MASTER_KEY)
+  MASTER=$(redis_retry GET $CLUSTER_MASTER_KEY) || {
+    echo "ERROR: Cannot get master from Redis"
+    return 1
+  }
   
-  # Verify master is still active
   if [ -n "$MASTER" ]; then
     MASTER_HEARTBEAT="rabbitmq:node:${MASTER}:heartbeat"
-    if ! $REDIS_CMD EXISTS $MASTER_HEARTBEAT > /dev/null; then
-      echo "Master $MASTER is stale, clearing from redis..."
-      $REDIS_CMD DEL $CLUSTER_MASTER_KEY
+    if ! redis_retry EXISTS $MASTER_HEARTBEAT > /dev/null 2>&1; then
+      echo "Master $MASTER is stale, clearing..."
+      redis_retry DEL $CLUSTER_MASTER_KEY || true
       MASTER=""
     fi
   fi
@@ -94,7 +116,7 @@ get_cluster_master() {
 set_cluster_master() {
   local node=$1
   echo "Setting cluster master to $node..."
-  $REDIS_CMD SET $CLUSTER_MASTER_KEY "$node"
+  redis_retry SET $CLUSTER_MASTER_KEY "$node" || exit 1
   echo "Master set in redis"
 }
 

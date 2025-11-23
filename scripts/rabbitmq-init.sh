@@ -32,7 +32,7 @@ until nc -z $REDIS_HOST $REDIS_PORT > /dev/null 2>&1; do
   sleep 1
 done
 
-echo "✓ Redis is reachable!"
+echo "Redis is reachable!"
 
 # Now install redis-cli for coordinator operations
 echo "Installing redis-cli for coordinator..."

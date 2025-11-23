@@ -94,12 +94,7 @@ services:
       - fog-network
     command: 
       - redis-server
-      - "--appendonly"
-      - "yes"
-      - "--maxmemory"
-      - "512mb"
-      - "--maxmemory-policy"
-      - "allkeys-lru"
+      - "/etc/redis/redis.conf"
       - "--requirepass"
       - "${REDIS_PASS}"
     healthcheck:

@@ -13,7 +13,7 @@ A highly available, distributed fog computing task scheduler built on Docker Swa
 - [Failover Flow](#failover-flow)
 - [Queue Architecture](#queue-architecture)
 - [Configuration](#configuration)
-- [Troubleshooting](#troubleshooting)
+- [Support](#Support)
 
 ---
 
@@ -42,10 +42,10 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Docker Swarm Cluster                        │
+│                      Docker Swarm Cluster                       │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  Manager Nodes (3)                    Worker Nodes (2)           │
+│                                                                 │
+│  Manager Nodes (3)                    Worker Nodes (2)          │
 │  ┌───────────────┐                    ┌─────────────────┐       │
 │  │   manager1    │                    │    worker1      │       │
 │  │ ┌───────────┐ │                    │  ┌───────────┐  │       │
@@ -73,8 +73,8 @@ This project implements an intelligent task scheduler for fog computing environm
 │  │ │(replica)  │ │                                              │
 │  │ └───────────┘ │                                              │
 │  └───────────────┘                                              │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
                     fog-network (overlay)
@@ -283,14 +283,20 @@ make up
 ### 4. Verify Deployment
 Commands here are executed from within the master manager
 ```bash
-# Check services
+# Check services status
 make status
+
+# Check services health
+make health
 
 # Check RabbitMQ cluster status
 make rabbitmq
 
 # Check Redis connectivity
 make redis
+
+# Extra commands
+make help
 ```
 
 ### 5. Access Management UI
@@ -308,7 +314,7 @@ make redis
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     COLD START SEQUENCE                          │
+│                     COLD START SEQUENCE                         │
 └─────────────────────────────────────────────────────────────────┘
 
 Step 1: Redis Initialization
@@ -518,13 +524,13 @@ Step 5: Cluster Finalization
 └────┬─────────────┘
      │
      ▼
-┌──────────────────────────────────────┐
+┌─────────────────────────────────────-─┐
 │          CLUSTER READY                │
 │  - 3 nodes running                    │
 │  - Quorum queues replicated           │
 │  - Heartbeats active                  │
 │  - Redis coordination operational     │
-└──────────────────────────────────────┘
+└─────────────────────────────────────-─┘
 ```
 
 ### Key Initialization Points
@@ -587,7 +593,7 @@ done
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│               SINGLE NODE FAILURE & RECOVERY                     │
+│               SINGLE NODE FAILURE & RECOVERY                    │
 └─────────────────────────────────────────────────────────────────┘
 
 Initial State:
@@ -703,7 +709,7 @@ Impact: Minimal (2/3 nodes served requests)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              MASTER NODE FAILURE & RECOVERY                      │
+│              MASTER NODE FAILURE & RECOVERY                     │
 └─────────────────────────────────────────────────────────────────┘
 
 Initial State:
@@ -829,7 +835,7 @@ Special: rabbitmq1 loses "master" role,
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              NETWORK PARTITION & AUTOHEAL                        │
+│              NETWORK PARTITION & AUTOHEAL                       │
 └─────────────────────────────────────────────────────────────────┘
 
 Initial State:
@@ -870,11 +876,11 @@ Time T+10s:
 Autoheal Strategy (config: autoheal)
 ═════════════════════════════════════
 Time T+15s:
-    ┌─────────────────────────────────┐
-    │ Autoheal Coordinator Election   │
-    │ - Oldest node becomes leader    │
+    ┌────────────────────────────────-─┐
+    │ Autoheal Coordinator Election    │
+    │ - Oldest node becomes leader     │
     │ - Leader: RMQ1 (rabbit@rabbitmq1)│
-    └─────────────────────────────────┘
+    └─────────────────────────────────-┘
 
 
 Time T+20s:
@@ -944,7 +950,7 @@ Data Loss: Messages on RMQ1 during partition
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                  REDIS FAILURE SCENARIO                          │
+│                  REDIS FAILURE SCENARIO                         │
 └─────────────────────────────────────────────────────────────────┘
 
 Initial State:
@@ -959,8 +965,8 @@ Event: Redis Container Crash
 ══════════════════════════════
 Time T+0s:
 ┌────────┐  ┌────────┐  ┌────────┐       ┌───────┐
-│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   ❌   │ Redis │
-│ MASTER │  │ MEMBER │  │ MEMBER │        │  ❌   │
+│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   ❌  │ Redis │
+│ MASTER │  │ MEMBER │  │ MEMBER │       │  ❌   │
 └────────┘  └────────┘  └────────┘       └───────┘
 
 Impact:
@@ -1023,36 +1029,36 @@ Impact: Coordination unavailable, but
 ```
                     RabbitMQ Virtual Host: /fog
 ┌─────────────────────────────────────────────────────────────┐
-│                                                               │
-│  ┌──────────────┐      ┌──────────────┐      ┌────────────┐│
-│  │tasks.direct  │      │system.fanout │      │results.    ││
-│  │   (direct)   │      │   (fanout)   │      │   topic    ││
-│  └──────┬───────┘      └──────┬───────┘      └─────┬──────┘│
-│         │                     │                     │       │
-│         │ Routing Keys:       │ Broadcasts:         │ Keys: │
-│         │ - high_priority     │ - All system msgs   │ - *.* │
-│         │ - normal            │                     │       │
-│         │ - low_priority      │                     │       │
-│         │                     │                     │       │
-│         ▼                     ▼                     ▼       │
-│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐│
-│  │tasks.high   │      │System Queues│      │results.     ││
-│  │tasks.normal │      │             │      │  success    ││
-│  │tasks.low    │      │             │      │results.     ││
-│  └─────────────┘      └─────────────┘      │  failed     ││
-│                                             └─────────────┘│
 │                                                             │
-│  ┌──────────────┐                   ┌────────────┐        │
-│  │metrics.topic │                   │    dlx     │        │
-│  │   (topic)    │                   │  (topic)   │        │
-│  └──────┬───────┘                   └─────┬──────┘        │
-│         │ Keys:                            │               │
-│         │ - metrics.node.#                 │ All failed    │
-│         │                                  │ messages      │
-│         ▼                                  ▼               │
-│  ┌─────────────┐                   ┌─────────────┐        │
-│  │metrics.node │                   │     dlq     │        │
-│  └─────────────┘                   └─────────────┘        │
+│  ┌──────────────┐      ┌──────────────┐      ┌────────────┐ │
+│  │tasks.direct  │      │system.fanout │      │results.    │ │
+│  │   (direct)   │      │   (fanout)   │      │   topic    │ │
+│  └──────┬───────┘      └──────┬───────┘      └─────┬──────┘ │
+│         │                     │                    │        │
+│         │ Routing Keys:       │ Broadcasts:        │ Keys:  │
+│         │ - high_priority     │ - All system msgs  │ - *.*  │
+│         │ - normal            │                    │        │
+│         │ - low_priority      │                    │        │
+│         │                     │                    │        │
+│         ▼                     ▼                     ▼       │
+│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐  │
+│  │tasks.high   │      │System Queues│      │results.     │  │
+│  │tasks.normal │      │             │      │  success    │  │
+│  │tasks.low    │      │             │      │results.     │  │
+│  └─────────────┘      └─────────────┘      │  failed     │  │
+│                                            └─────────────┘  │
+│                                                             │
+│  ┌──────────────┐                   ┌────────────┐          │
+│  │metrics.topic │                   │    dlx     │          │
+│  │   (topic)    │                   │  (topic)   │          │
+│  └──────┬───────┘                   └─────┬──────┘          │
+│         │ Keys:                           │                 │
+│         │ - metrics.node.#                │ All failed      │
+│         │                                 │ messages        │
+│         ▼                                 ▼                 │
+│  ┌─────────────┐                   ┌─────────────┐          │
+│  │metrics.node │                   │     dlq     │          │
+│  └─────────────┘                   └─────────────┘          │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -1214,3 +1220,18 @@ rename-command FLUSHDB ""
 rename-command FLUSHALL ""
 rename-command CONFIG ""
 ```
+---
+
+## Support
+
+### System support
+The repo is packed with a make file that contains helpeful commands, at the manage node you can execute most of important commands:
+```bash
+cd Optimized-RabbitMQ-Scheduler
+make help
+```
+
+### Issues
+For issues and questions:
+- GitHub Issues: https://github.com/Crabzie/Optimized-RabbitMQ-Scheduler/issues
+- Email: hamzalagab.tech@gmail.com

@@ -34,6 +34,31 @@ done
 
 echo "Redis is reachable!"
 
+echo "Waiting for PostgreSQL to be ready at $PG_HOST:$PG_PORT..."
+
+POSTGRES_WAIT=0
+MAX_POSTGRES_WAIT=60
+
+until PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -c "SELECT 1" > /dev/null 2>&1; do
+  echo "PostgreSQL not ready, waiting... (attempt $POSTGRES_WAIT/$MAX_POSTGRES_WAIT)"
+  ((POSTGRES_WAIT++))
+  
+  if [ $POSTGRES_WAIT -ge $MAX_POSTGRES_WAIT ]; then
+    echo "ERROR: PostgreSQL not reachable after $MAX_POSTGRES_WAIT seconds"
+    echo "Debugging info:"
+    echo "  POSTGRES_HOST: $PG_HOST"
+    echo "  POSTGRES_PORT: $PG_PORT"
+    echo "  PGUSER: $PG_USER"
+    echo "  Testing TCP connection:"
+    nc -zv $PG_HOST $PG_PORT|| echo "  TCP connection failed"
+    exit 1
+  fi
+  
+  sleep 1
+done
+
+echo "PostgreSQL is ready!"
+
 # Now install redis-cli for coordinator operations
 echo "Installing redis-cli for coordinator..."
 apk add --no-cache redis > /dev/null 2>&1 || true

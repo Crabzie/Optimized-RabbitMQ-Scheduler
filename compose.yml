@@ -5,8 +5,10 @@ configs:
     file: ./config/rabbitmq/rabbitmq.conf
   rabbitmq_definitions:
     file: ./config/rabbitmq/definitions.json
-  rabbitmq_init:
-    file: ./scripts/rabbitmq-init.sh
+  init_infra:
+    file: ./scripts/init_infra.sh
+  rabbitmq_healthcheck:
+    file: ./scripts/rabbitmq-healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
     
@@ -47,18 +49,26 @@ x-rabbitmq-base: &rabbitmq-base
     - source: rabbitmq_definitions
       target: /etc/rabbitmq/definitions.json
       mode: 0444
-    - source: rabbitmq_init
-      target: /init.sh
+    - source: init_infra
+      target: /init_infra.sh
+      mode: 0555
+    - source: rabbitmq_healthcheck
+      target: /health/rabbitmq_healthcheck.sh
       mode: 0555
   networks:
     - fog-network
   entrypoint: ["/bin/bash", "-c"]
+  command: |
+    "rabbitmq-server &
+     sleep 10
+     /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
+     wait"
   healthcheck:
-    test: ["CMD", "rabbitmq-diagnostics", "ping"]
+    test: ["CMD", "/health/rabbitmq_healthcheck.sh"]
     interval: 30s
     timeout: 15s
     retries: 5
-    start_period: 120s
+    start_period: 180s
   deploy:
     replicas: 1
     restart_policy:
@@ -123,7 +133,7 @@ services:
     image: postgres:latest
     hostname: postgres
     environment:
-      POSTGRES_DB: schedulerdb
+      POSTGRES_DB: ${PG_DB}
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASS}
     volumes:
@@ -170,6 +180,11 @@ services:
       - "15672:15672"
     environment:
       <<: *rabbitmq-common-env
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: ${PG_DB}
+      PG_PASS: ${PG_PASS}
+      PG_USER: ${PG_USER}
       RABBITMQ_NODENAME: rabbit@rabbitmq1
       CLUSTER_WITH: ""
     deploy:
@@ -178,11 +193,7 @@ services:
             - node.labels.manager-master == true
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
-    command: |
-      "rabbitmq-server &
-       sleep 10
-       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
-       wait"
+
 
   rabbitmq2:
     <<: *rabbitmq-base
@@ -199,11 +210,6 @@ services:
             - node.labels.manager-rep1 == true
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
-    command: |
-      "rabbitmq-server &
-       sleep 15
-       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
-       wait"
 
   rabbitmq3:
     <<: *rabbitmq-base
@@ -220,11 +226,6 @@ services:
             - node.labels.manager-rep2 == true
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
-    command: |
-      "rabbitmq-server &
-       sleep 20
-       /bin/bash /init.sh 2>&1 | tee /var/log/init.log
-       wait"
 
   # scheduler:
   #   build: ./scheduler

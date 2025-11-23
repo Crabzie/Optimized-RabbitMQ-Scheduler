@@ -1,6 +1,6 @@
 # Optimized RabbitMQ Scheduler
 
-A highly available, distributed fog computing task scheduler built on Docker Swarm with RabbitMQ clustering and Redis-based coordination.
+A highly available, distributed fog computing task scheduler built on Docker Swarm with RabbitMQ clustering, Redis-based coordination, and PostgreSQL for persistent task metadata storage.
 
 ## 📋 Table of Contents
 
@@ -11,9 +11,9 @@ A highly available, distributed fog computing task scheduler built on Docker Swa
 - [Quick Start](#quick-start)
 - [Initialization Flow](#initialization-flow)
 - [Failover Flow](#failover-flow)
-- [Queue Architecture](#queue-architecture)
 - [Configuration](#configuration)
-- [Support](#Support)
+- [Operations & Monitoring](#operations--monitoring)
+- [Support](#support)
 
 ---
 
@@ -22,17 +22,27 @@ A highly available, distributed fog computing task scheduler built on Docker Swa
 This project implements an intelligent task scheduler for fog computing environments with the following features:
 
 - **High Availability**: 3-node RabbitMQ cluster with quorum queues
-- **Distributed Coordination**: Redis-based cluster membership tracking
-- **Priority Scheduling**: 3-tier task prioritization system
-- **Fault Tolerance**: Automatic failover and node recovery
+- **Distributed Coordination**: Redis-based cluster membership tracking and heartbeat management
+- **Persistent Task Store**: PostgreSQL database for reliable task metadata storage
+- **Priority Scheduling**: Multi-tier task prioritization system
+- **Fault Tolerance**: Automatic failover and node recovery with Redis dependency checks
 - **Resource Awareness**: CPU/memory-constrained worker tiers
 
 ### Key Technologies
 
 - **RabbitMQ 4.1.6**: Message queue cluster with management plugin
-- **Redis 8.x**: Coordination state and cluster membership
+- **Redis 7.2**: Coordination state and cluster membership (configured via command-line)
+- **PostgreSQL 18**: Task metadata and scheduler state persistence
 - **Docker Swarm**: Orchestration platform
 - **Alpine Linux**: Lightweight container base
+
+### Project Status
+
+**Infrastructure**: ✅ Production-ready (RabbitMQ cluster, Redis coordination, PostgreSQL persistence)
+
+**Application Layer**: 🚧 Under development
+- **Scheduler**: Core scheduling logic and task distribution (in progress)
+- **Fog Nodes**: Task execution workers and result handlers (in progress)
 
 ---
 
@@ -56,10 +66,14 @@ This project implements an intelligent task scheduler for fog computing environm
 │  │ │  redis    │ │    │               ┌─────────────────┐       │
 │  │ │  (6379)   │ │    │               │    worker2      │       │
 │  │ └───────────┘ │    │               │  ┌───────────┐  │       │
-│  └───────────────┘    │               │  │fog-node-2 │  │       │
-│                       │               │  │(executor) │  │       │
-│  ┌───────────────┐    │               │  └───────────┘  │       │
-│  │   manager2    │    │               └─────────────────┘       │
+│  │ ┌───────────┐ │    │               │  │fog-node-2 │  │       │
+│  │ │ postgres  │ │    │               │  │(executor) │  │       │
+│  │ │  (5432)   │ │    │               │  └───────────┘  │       │
+│  │ └───────────┘ │    │               └─────────────────┘       │
+│  └───────────────┘    │                                         │
+│                       │                                         │
+│  ┌───────────────┐    │                                         │
+│  │   manager2    │    │                                         │
 │  │ ┌───────────┐ │    │                                         │
 │  │ │rabbitmq2  │◄├────┤                                         │
 │  │ │(replica)  │ │    │                                         │
@@ -84,7 +98,7 @@ This project implements an intelligent task scheduler for fog computing environm
 
 | Node | Role | Services | Ports |
 |------|------|----------|-------|
-| **manager1** | Manager | rabbitmq1 (master), redis | 15672, 6379 |
+| **manager1** | Manager | rabbitmq1 (master), redis, postgres | 15672, 6379, 5432 |
 | **manager2** | Manager | rabbitmq2 (replica) | 15673 |
 | **manager3** | Manager | rabbitmq3 (replica) | 15674 |
 | **worker1** | Worker | fog-node-1 (executor) | - |
@@ -97,6 +111,44 @@ This project implements an intelligent task scheduler for fog computing environm
 - **Driver**: overlay
 - **Scope**: Swarm-wide
 - **DNS**: Automatic service discovery
+
+### Data Flow Architecture
+
+```
+┌──────────────┐
+│   Scheduler  │  (Under Development)
+│   (manager1) │
+└──────┬───────┘
+       │
+       ├─── Reads/Writes Task Metadata ─────► PostgreSQL
+       │                                      (schedulerdb)
+       │
+       ├─── Publishes Tasks ────────────────► RabbitMQ Cluster
+       │                                      (Quorum Queues)
+       │
+       └─── Checks Cluster State ───────────► Redis
+                                              (Coordination)
+            ▲
+            │
+            │  Heartbeat & Membership
+            │
+    ┌───────┴────────┐
+    │   RabbitMQ     │
+    │   Init Script  │
+    │   (All Nodes)  │
+    └────────────────┘
+
+            │
+            │  Consumes Tasks
+            ▼
+    ┌────────────────┐
+    │   Fog Nodes    │  (Under Development)
+    │   (workers)    │
+    └────────────────┘
+            │
+            └─── Publishes Results ──────────► RabbitMQ
+                                               (Result Queues)
+```
 
 ---
 
@@ -146,15 +198,15 @@ Start Period: 40s
 
 ### 2. Redis
 
-**Configuration**: Single instance with AOF persistence
+**Configuration**: Single instance with command-line configuration
 
 #### Features
-- **Persistence**: AOF with everysec fsync
-- **Memory Limit**: 512MB
-- **Eviction Policy**: allkeys-lru
-- **IO Threads**: 4 (with read support)
-- **Max Clients**: 10,000
-- **Active Defragmentation**: Enabled
+- **Persistence**: AOF with everysec fsync (via `--appendonly yes`)
+- **Memory Limit**: 1GB (via `--maxmemory 1G`)
+- **Eviction Policy**: allkeys-lru (via `--maxmemory-policy allkeys-lru`)
+- **IO Threads**: 2
+- **Max Clients**: 1,000
+- **Password Protection**: Via `--requirepass` flag
 
 #### Data Structures Used
 ```
@@ -163,9 +215,22 @@ rabbitmq:cluster:master             → STRING (master node name)
 rabbitmq:node:{nodename}:heartbeat  → STRING (timestamp, TTL: 90s)
 ```
 
-#### Security
-- Password authentication required
-- Disabled commands: `FLUSHDB`, `FLUSHALL`, `CONFIG`
+#### Deployment Configuration
+Redis is configured entirely via command-line arguments in `compose.yml`:
+```yaml
+command:
+  - redis-server
+  - "--appendonly" 
+  - "yes"
+  - "--maxmemory"
+  - "1G"
+  - "--maxmemory-policy"
+  - "allkeys-lru"
+  - "--requirepass"
+  - "${REDIS_PASS}"
+```
+
+**Note**: Redis config file (`redis.conf`) has been removed in favor of command-line configuration for simplicity and environment variable compatibility.
 
 #### Health Checks
 ```bash
@@ -176,28 +241,53 @@ Retries: 5
 Start Period: 10s
 ```
 
-### 3. Fog Node Workers
+### 3. PostgreSQL
 
-**Configuration**: 3 worker tiers with resource constraints
+**Configuration**: Single instance with custom configuration file
 
-#### Worker Specifications
+#### Features
+- **Version**: PostgreSQL 18
+- **Persistence**: WAL-based durability with fsync
+- **Connection Limit**: 100 max connections
+- **Memory**: 256MB shared_buffers, 64MB maintenance work mem
+- **Checkpoints**: 5-minute timeout, 1GB max WAL size
+- **Database**: `schedulerdb` (auto-created on first start)
+
+#### Purpose
+PostgreSQL serves as the persistent task metadata store for the scheduler:
+- **Task Definitions**: Job specifications, scheduling rules, retry policies
+- **Task History**: Execution logs, status transitions, timestamps
+- **Scheduler State**: System state, configuration snapshots
+- **Audit Trail**: User actions, system events, compliance data
+
+#### Node Specifications
 ```yaml
-fog-node-1 (Tier 1 - Light):
-  CPU: 0.5 cores
-  Memory: 512MB
-  Placement: fog==1 label
-
-fog-node-2 (Tier 2 - Medium):
-  CPU: 0.75 cores
-  Memory: 768MB
-  Placement: fog==3 label
-
-
-fog-node-3 (Tier 3 - Heavy):
-  CPU: 1.0 cores
-  Memory: 1024MB
-  Placement: fog==3 label
+postgres:
+  - Hostname: postgres
+  - Port: 5432
+  - Database: schedulerdb
+  - User: ${PG_USER}
+  - Placement: manager1
 ```
+
+#### Health Checks
+```bash
+Test: pg_isready -U ${PG_USER} -d schedulerdb
+Interval: 10s
+Timeout: 3s
+Retries: 5
+Start Period: 10s
+```
+
+### 4. Fog Node Workers (Under Development)
+
+**Configuration**: Planned multi-tier worker pool
+
+The fog node implementation is currently in development. When complete, workers will:
+- Pull tasks from RabbitMQ priority queues
+- Execute tasks with resource constraints (CPU/memory limits)
+- Report results back to RabbitMQ result queues
+- Support graceful shutdown and task preemption
 
 ---
 
@@ -207,6 +297,7 @@ fog-node-3 (Tier 3 - Heavy):
 - Docker Engine 20.10+
 - Docker Compose 1.29+ (with Compose v3.8 support)
 - Docker Swarm initialized
+- Go 1.21+ (for local development)
 
 ### Hardware Requirements
 - **Manager Nodes**: 2 CPU cores, 4GB RAM minimum (per node)
@@ -233,6 +324,10 @@ MQ_NODE2_WORKER=worker2
 MQ_NODE2_PASS=worker2_password
 MQ_NODE3_WORKER=worker3
 MQ_NODE3_PASS=worker3_password
+
+# PostgreSQL
+PG_USER=scheduler
+PG_PASS=your_postgres_password
 ```
 
 ---
@@ -252,36 +347,42 @@ docker swarm join --token <worker-token> <manager1-ip>:2377
 ```
 
 ### 2. Label Worker Nodes
-Commands here are executed from within the master manager
+Commands executed from the master manager:
 ```bash
-# Choose a manager host (out of the 3 manager nodes) to be swarm master manager and label it as manager-master
-docker node update --label-add manager-master=true {hostname}
-# Choose a different manager host (out of the 2 manager nodes left) to be swarm manager replica1 and label it as manager-rep1
-docker node update --label-add manager-rep1=true {hostname}
-# Label the last manage host to be swarm manager replica2 and label it as manager-rep2
-docker node update --label-add manager-rep2=true {hostname}
-# On your a worker host label the swarm node as worker1
-docker node update --label-add worker1=true {hostname}
-# On your second worker host label the swarm node as worker2
-docker node update --label-add worker2=true {hostname}
+# Label manager nodes
+docker node update --label-add manager-master=true {manager1-hostname}
+docker node update --label-add manager-rep1=true {manager2-hostname}
+docker node update --label-add manager-rep2=true {manager3-hostname}
+
+# Label worker nodes
+docker node update --label-add worker1=true {worker1-hostname}
+docker node update --label-add worker2=true {worker2-hostname}
 ```
 
 ### 3. Deploy Stack
-Commands here are executed from within the master manager
+Commands executed from the master manager:
 ```bash
 # Clone repository
 git clone https://github.com/Crabzie/Optimized-RabbitMQ-Scheduler.git
 cd Optimized-RabbitMQ-Scheduler
 
-# Update .env file (see Prerequisites) or skip this if you use the provided .env file
+# Update .env file (see Prerequisites)
 nano .env
 
-# Deploy stack
+# Deploy stack (automated sequencing)
 make up
 ```
 
+The `make up` command handles sequential startup:
+1. Deploy stack with all services
+2. Wait for PostgreSQL to be healthy
+3. Wait for Redis to be healthy  
+4. Start RabbitMQ1 (master)
+5. Start RabbitMQ2 and wait for cluster join
+6. Start RabbitMQ3 and wait for cluster join
+
 ### 4. Verify Deployment
-Commands here are executed from within the master manager
+Commands executed from the master manager:
 ```bash
 # Check services status
 make status
@@ -295,16 +396,19 @@ make rabbitmq
 # Check Redis connectivity
 make redis
 
-# Extra commands
+# Check PostgreSQL
+make postgres
+
+# View available commands
 make help
 ```
 
-### 5. Access Management UI
-- RabbitMQ1: http://manager1-ip:15672
-- RabbitMQ2: http://manager2-ip:15673
-- RabbitMQ3: http://manager3-ip:15674
-- Username: `admin` (from `.env`)
-- Password: `MQ_ADMIN_PASS` (from `.env`)
+### 5. Access Management Interfaces
+- **RabbitMQ1**: http://manager1-ip:15672
+- **RabbitMQ2**: http://manager2-ip:15673
+- **RabbitMQ3**: http://manager3-ip:15674
+- **Username**: `admin` (from `.env`)
+- **Password**: `MQ_ADMIN_PASS` (from `.env`)
 
 ---
 
@@ -317,14 +421,32 @@ make help
 │                     COLD START SEQUENCE                         │
 └─────────────────────────────────────────────────────────────────┘
 
-Step 1: Redis Initialization
-════════════════════════════
+Step 1: PostgreSQL Initialization
+══════════════════════════════════
+┌──────────┐
+│Postgres  │  Starts on manager1
+│  Start   │  - Loads postgresql.conf
+└────┬─────┘  - Binds to 0.0.0.0:5432
+     │        - Initializes data directory
+     │        - Creates schedulerdb database
+     ▼
+┌──────────┐
+│Postgres  │  Health check passes
+│  Ready   │  - pg_isready → accepting connections
+└────┬─────┘
+     │
+     │
+Step 2: Redis Initialization
+═════════════════════════════
+     │
+     ▼
 ┌──────────┐
 │  Redis   │  Starts on manager1
-│  Start   │  - Loads redis.conf
-└────┬─────┘  - Binds to 0.0.0.0:6379
-     │        - AOF recovery (if exists)
-     │        - Ready to accept connections
+│  Start   │  - Command-line config applied
+└────┬─────┘  - --appendonly yes
+     │        - --maxmemory 1G
+     │        - --maxmemory-policy allkeys-lru
+     │        - --requirepass ${REDIS_PASS}
      ▼
 ┌──────────┐
 │  Redis   │  Health check passes
@@ -332,7 +454,7 @@ Step 1: Redis Initialization
 └────┬─────┘
      │
      │
-Step 2: RabbitMQ1 (Primary) Initialization
+Step 3: RabbitMQ1 (Primary) Initialization
 ═══════════════════════════════════════════
      │
      ▼
@@ -350,7 +472,8 @@ Step 2: RabbitMQ1 (Primary) Initialization
 ┌──────────────────┐
 │ Wait for Redis   │  nc -z redis 6379
 │ Connectivity     │  - Max 120s (60 attempts)
-└────┬─────────────┘ - Exit if timeout
+└────┬─────────────┘  - Exit if timeout
+     │                 ⚠️  MANDATORY: Redis must be online
      │
      ▼
 ┌──────────────────┐
@@ -416,7 +539,7 @@ Step 2: RabbitMQ1 (Primary) Initialization
      │                   └──────────────────┘
      │
      │
-Step 3: RabbitMQ2 (Secondary) Initialization
+Step 4: RabbitMQ2 (Secondary) Initialization
 ═════════════════════════════════════════════
      │
      ▼
@@ -433,8 +556,8 @@ Step 3: RabbitMQ2 (Secondary) Initialization
      ▼
 ┌──────────────────┐
 │ Wait for Redis   │  nc -z redis 6379
-└────┬─────────────┘
-     │
+└────┬─────────────┘  ⚠️  MANDATORY: Redis must be online
+     │                   (exits if not found after 120s)
      ▼
 ┌──────────────────┐
 │ Install          │  apk add redis
@@ -445,7 +568,7 @@ Step 3: RabbitMQ2 (Secondary) Initialization
 ┌──────────────────┐
 │ Wait for Master  │  Loop for 180s:
 │ Election         │  redis-cli GET rabbitmq:cluster:master
-└────┬─────────────┘ Exit if timeout
+└────┬─────────────┘  Exit if timeout
      │
      ▼
 ┌──────────────────┐
@@ -457,7 +580,7 @@ Step 3: RabbitMQ2 (Secondary) Initialization
 ┌──────────────────┐
 │ Wait for Master  │  Loop until Mnesia ready:
 │ Mnesia Ready     │  rabbitmqctl -n $MASTER eval
-└────┬─────────────┘ 'rabbit_mnesia:is_running().'
+└────┬─────────────┘  'rabbit_mnesia:is_running().'
      │
      ▼
 ┌──────────────────┐
@@ -490,7 +613,7 @@ Step 3: RabbitMQ2 (Secondary) Initialization
 └──────────────────┘
 
 
-Step 4: RabbitMQ3 (Secondary) Initialization
+Step 5: RabbitMQ3 (Secondary) Initialization
 ═════════════════════════════════════════════
      │
      ▼
@@ -508,14 +631,14 @@ Step 4: RabbitMQ3 (Secondary) Initialization
 └──────────────────┘
 
 
-Step 5: Cluster Finalization
+Step 6: Cluster Finalization
 ═════════════════════════════
      │
      ▼
 ┌──────────────────┐
 │ Verify Cluster   │  All 3 nodes report:
 │ Status           │  - Running nodes: 3
-└────┬─────────────┘ - Quorum queues: Online
+└────┬─────────────┘  - Quorum queues: Online
      │
      ▼
 ┌──────────────────┐
@@ -524,66 +647,41 @@ Step 5: Cluster Finalization
 └────┬─────────────┘
      │
      ▼
-┌─────────────────────────────────────-─┐
-│          CLUSTER READY                │
-│  - 3 nodes running                    │
-│  - Quorum queues replicated           │
-│  - Heartbeats active                  │
-│  - Redis coordination operational     │
-└─────────────────────────────────────-─┘
+┌─────────────────────────────────────────┐
+│          CLUSTER READY                  │
+│  - PostgreSQL: Online                   │
+│  - Redis: Online                        │
+│  - 3 RabbitMQ nodes running             │
+│  - Quorum queues replicated             │
+│  - Heartbeats active                    │
+│  - Redis coordination operational       │
+└─────────────────────────────────────────┘
 ```
 
-### Key Initialization Points
+### Key Initialization Dependencies
 
-#### 1. Primary Node Bootstrap (rabbitmq1) Snippet
+#### 1. Redis Dependency (MANDATORY)
+From `rabbitmq-init.sh`:
 ```bash
-# Check for existing cluster
-MEMBERS=$(redis-cli -h redis -p 6379 -a "$REDIS_PASS" SMEMBERS "$CLUSTER_MEMBERS_KEY")
-
-if [ -z "$MEMBERS" ]; then
-  # No active cluster - bootstrap as master
-  rabbitmqctl stop_app
-  rabbitmqctl reset
-  rabbitmqctl start_app
+# Wait for Redis - MANDATORY for cluster coordination
+until nc -z $REDIS_HOST $REDIS_PORT > /dev/null 2>&1; do
+  echo "Redis not ready, waiting... (attempt $WAIT_COUNT/$((MAX_WAIT/2)))"
+  ((WAIT_COUNT++))
   
-  # Register in Redis
-  redis-cli SET rabbitmq:cluster:master "rabbit@rabbitmq1"
-  redis-cli SADD rabbitmq:cluster:members "rabbit@rabbitmq1"
+  if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "ERROR: Redis not reachable after $MAX_WAIT seconds"
+    exit 1  # ⚠️ EXITS - Redis is mandatory
+  fi
   
-  # Create users on first boot
-  create_users
-fi
-```
-
-#### 2. Secondary Node Join (rabbitmq2/3) Snippet
-```bash
-# Wait for master election
-MASTER=$(wait_for_master 180)
-
-# Verify master reachability
-verify_master_reachable "$MASTER"
-
-# Wait for master Mnesia
-wait_for_master_mnesia "$MASTER"
-
-# Join cluster
-rabbitmqctl stop_app
-rabbitmqctl reset
-rabbitmqctl join_cluster "$MASTER"
-rabbitmqctl start_app
-
-# Register in Redis
-redis-cli SADD rabbitmq:cluster:members "rabbit@rabbitmq2"
-```
-
-#### 3. Heartbeat Loop (All Nodes) Snippet
-```bash
-# Background process
-while true; do
-  redis-cli SETEX "rabbitmq:node:${RABBITMQ_NODENAME}:heartbeat" 90 "$(date +%s)"
-  sleep 30
+  sleep 1
 done
 ```
+
+**Why Redis is Mandatory**:
+- Cluster membership tracking requires Redis `SET` data structure
+- Heartbeat mechanism stores timestamps with TTL in Redis
+- Master election state stored in Redis
+- Without Redis, nodes cannot coordinate cluster formation or failover
 
 ---
 
@@ -649,8 +747,14 @@ Time T+125s:
     ┌──────────────────────┐
     │ rabbitmq2 Start      │
     │ - Wait for RabbitMQ  │
-    │ - Wait for Redis     │
+    │ - Wait for Redis     │  ⚠️ CRITICAL CHECK
     └──────────────────────┘
+    
+    Redis Check:
+    until nc -z redis 6379; do
+      # Retry for 120s
+      # EXIT if Redis not found
+    done
 
 
 Time T+145s:
@@ -705,442 +809,148 @@ Data Loss: NONE (quorum maintained)
 Impact: Minimal (2/3 nodes served requests)
 ```
 
-### Scenario 2: Master Node Failure (rabbitmq1 crashes)
+### Scenario 2: Redis Failure During RabbitMQ Restart
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              MASTER NODE FAILURE & RECOVERY                     │
-└─────────────────────────────────────────────────────────────────┘
-
-Initial State:
-═════════════
-┌────────┐  ┌────────┐  ┌────────┐
-│  RMQ1  │  │  RMQ2  │  │  RMQ3  │
-│ MASTER │  │ MEMBER │  │ MEMBER │
-└────────┘  └────────┘  └────────┘
-
-Redis State:
-  rabbitmq:cluster:master = "rabbit@rabbitmq1"
-  rabbitmq:cluster:members = {rabbitmq1, rabbitmq2, rabbitmq3}
-
-
-Event: rabbitmq1 Crash (Master Node)
-═════════════════════════════════════
-Time T+0s:
-         ❌        ┌────────┐  ┌────────┐
-                   │  RMQ2  │  │  RMQ3  │
-                   │ MEMBER │  │ MEMBER │
-                   └────────┘  └────────┘
-
-    - rabbitmq1 process dies
-    - Management UI (15672) unreachable
-    - AMQP connections to RMQ1 drop
-
-
-Time T+30s:
-    ┌────────────────────────────────────┐
-    │ Client Failover                    │
-    │ - AMQP clients detect connection   │
-    │   failure to rabbitmq1:5672        │
-    │ - Auto-reconnect to rabbitmq2:5672 │
-    │   or rabbitmq3:5672                │
-    └────────────────────────────────────┘
-
-
-Time T+90s (Heartbeat Expiry):
-    ┌─────────────────────────────────┐
-    │ Redis Cleanup                   │
-    │ - DEL rabbitmq1:heartbeat       │
-    │ - SMEMBERS → {RMQ2, RMQ3}       │
-    │ - master key still = rabbitmq1  │
-    └─────────────────────────────────┘
-    
-    Note: No automatic master re-election
-          (master key is just metadata)
-
-
-Time T+120s (Docker Restart):
-    rabbitmq1 container restarts on manager1
-
-
-Rejoin Sequence:
-════════════════
-Time T+125s:
-    ┌──────────────────────┐
-    │ rabbitmq1 Start      │
-    │ - RabbitMQ ready     │
-    │ - Redis connected    │
-    └──────────────────────┘
-
-
-Time T+145s:
-    ┌──────────────────────────────┐
-    │ Check Redis Cluster State    │
-    └──────────────────────────────┘
-    
-    MEMBERS=$(redis-cli SMEMBERS rabbitmq:cluster:members)
-    → Returns: rabbit@rabbitmq2, rabbit@rabbitmq3
-    
-    Decision: REJOIN (not bootstrap)
-    Reason: Active members exist
-
-
-Time T+150s:
-    ┌──────────────────────────────┐
-    │ Rejoin via RMQ2 or RMQ3      │
-    └──────────────────────────────┘
-    
-    Attempt: Join via rabbit@rabbitmq2
-    
-    rabbitmqctl stop_app
-    rabbitmqctl reset
-    rabbitmqctl join_cluster rabbit@rabbitmq2
-    rabbitmqctl start_app
-    
-    ✓ SUCCESS
-
-
-Time T+160s:
-    ┌────────────────────────────────┐
-    │ Role Adjustment                │
-    └────────────────────────────────┘
-    
-    - rabbitmq1 rejoins as MEMBER (not master)
-    - Redis: SADD members rabbit@rabbitmq1
-    - Start heartbeat
-    - Sync quorum queue replicas
-
-
-Time T+180s:
-    ┌────────┐  ┌────────┐  ┌────────┐
-    │  RMQ1  │  │  RMQ2  │  │  RMQ3  │
-    │ MEMBER │  │ MEMBER │  │ MEMBER │  All nodes equal
-    └────────┘  └────────┘  └────────┘
-    
-    Note: "Master" designation in Redis is now
-          just coordination metadata. All nodes
-          are equal in RabbitMQ cluster.
-
-
-Recovery Summary:
-═════════════════
-Total Downtime: ~60s for rabbitmq1
-Data Loss: NONE (quorum maintained)
-Impact: Clients failed over to RMQ2/RMQ3
-Special: rabbitmq1 loses "master" role,
-         but cluster remains functional
-```
-
-### Scenario 3: Network Partition (Split Brain)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              NETWORK PARTITION & AUTOHEAL                       │
-└─────────────────────────────────────────────────────────────────┘
-
-Initial State:
-═════════════
-┌────────┐  ┌────────┐  ┌────────┐
-│  RMQ1  │──│  RMQ2  │──│  RMQ3  │
-│ MASTER │  │ MEMBER │  │ MEMBER │  All connected
-└────────┘  └────────┘  └────────┘
-     │           │           │
-     └───────────┴───────────┘
-         fog-network
-
-
-Event: Network Partition (RMQ1 isolated)
-═════════════════════════════════════════
-Time T+0s:
-┌────────┐     ╳╳╳╳╳╳     ┌────────┐  ┌────────┐
-│  RMQ1  │     ╳╳╳╳╳╳     │  RMQ2  │──│  RMQ3  │
-│ ALONE  │     ╳╳╳╳╳╳     │ MEMBER │  │ MEMBER │
-└────────┘     ╳╳╳╳╳╳     └────────┘  └────────┘
-                Network Partition
-
-
-Partition Detection:
-═════════════════════
-Time T+10s:
-    ┌──────────────────────────────┐
-    │ RabbitMQ Detects Partition   │
-    │ - Node_down events           │
-    │ - Cluster status changes     │
-    └──────────────────────────────┘
-    
-    RMQ1 sees: {down, [rabbit@rabbitmq2, rabbit@rabbitmq3]}
-    RMQ2 sees: {down, [rabbit@rabbitmq1]}
-    RMQ3 sees: {down, [rabbit@rabbitmq1]}
-
-
-Autoheal Strategy (config: autoheal)
-═════════════════════════════════════
-Time T+15s:
-    ┌────────────────────────────────-─┐
-    │ Autoheal Coordinator Election    │
-    │ - Oldest node becomes leader     │
-    │ - Leader: RMQ1 (rabbit@rabbitmq1)│
-    └─────────────────────────────────-┘
-
-
-Time T+20s:
-    ┌─────────────────────────────────┐
-    │ Partition Winner Selection      │
-    │ - Winner: Partition with most   │
-    │   nodes = {RMQ2, RMQ3}          │
-    │ - Loser: {RMQ1}                 │
-    └─────────────────────────────────┘
-
-
-Time T+25s:
-    ┌─────────────────────────────────┐
-    │ Autoheal Actions                │
-    │ - Losing partition restarts     │
-    │   all nodes (RMQ1)              │
-    │ - Winning partition continues   │
-    │   (RMQ2, RMQ3)                  │
-    └─────────────────────────────────┘
-    
-    RMQ1 executes:
-      rabbitmqctl stop_app
-      rabbitmqctl start_app
-
-
-Time T+30s (Network Heals):
-╔════════════════════════════════════╗
-║   Network Restored                 ║
-╚════════════════════════════════════╝
-┌────────┐  ┌────────┐  ┌────────┐
-│  RMQ1  │──│  RMQ2  │──│  RMQ3  │
-│RESTART │  │ MEMBER │  │ MEMBER │
-└────────┘  └────────┘  └────────┘
-
-
-Rejoin After Autoheal:
-══════════════════════
-Time T+35s:
-    RMQ1 rabbitmq-init.sh detects:
-    - Redis members: {RMQ2, RMQ3}
-    - Initiates REJOIN procedure
-    
-    rabbitmqctl stop_app
-    rabbitmqctl reset
-    rabbitmqctl join_cluster rabbit@rabbitmq2
-    rabbitmqctl start_app
-
-
-Time T+45s:
-    ┌────────┐  ┌────────┐  ┌────────┐
-    │  RMQ1  │──│  RMQ2  │──│  RMQ3  │
-    │ MEMBER │  │ MEMBER │  │ MEMBER │  Cluster healed
-    └────────┘  └────────┘  └────────┘
-
-
-Recovery Summary:
-═════════════════
-Detection Time: ~10s
-Autoheal Time: ~15s
-Rejoin Time: ~20s
-Total Recovery: ~45s
-Data Loss: Messages on RMQ1 during partition
-           (quorum queues on RMQ2/RMQ3 preserved)
-```
-
-### Scenario 4: Redis Failure
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                  REDIS FAILURE SCENARIO                         │
+│          REDIS UNAVAILABLE DURING NODE RESTART                  │
 └─────────────────────────────────────────────────────────────────┘
 
 Initial State:
 ═════════════
 ┌────────┐  ┌────────┐  ┌────────┐       ┌───────┐
 │  RMQ1  │  │  RMQ2  │  │  RMQ3  │◄──────┤ Redis │
-│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │ (M1)  │
+│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │  ✓    │
 └────────┘  └────────┘  └────────┘       └───────┘
 
 
-Event: Redis Container Crash
-══════════════════════════════
+Event: RabbitMQ2 Crashes + Redis Goes Down
+════════════════════════════════════════════
 Time T+0s:
-┌────────┐  ┌────────┐  ┌────────┐       ┌───────┐
-│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   ❌  │ Redis │
-│ MASTER │  │ MEMBER │  │ MEMBER │       │  ❌   │
-└────────┘  └────────┘  └────────┘       └───────┘
-
-Impact:
-  ✓ RabbitMQ cluster: CONTINUES OPERATING
-  ✓ Message flow: UNAFFECTED
-  ✓ Quorum queues: UNAFFECTED
-  ✗ Heartbeat updates: FAIL (background)
-  ✗ New node joins: BLOCKED
+┌────────┐            ┌────────┐       ┌───────┐
+│  RMQ1  │     ❌     │  RMQ3  │   ❌  │ Redis │
+│ MASTER │            │ MEMBER │       │  ❌   │
+└────────┘            └────────┘       └───────┘
 
 
-Time T+30s (Heartbeat Failure):
+Time T+120s (RabbitMQ2 Restart Attempt):
+    ┌──────────────────────┐
+    │ rabbitmq2 Start      │
+    │ - RabbitMQ ready     │
+    │ - Check Redis...     │
+    └──────────────────────┘
+
+
+Redis Check Sequence:
+══════════════════════
+Time T+125s:
+    ┌────────────────────────────┐
+    │ Wait for Redis (120s max)  │
+    └────────────────────────────┘
+    
+    WAIT_COUNT=0
+    until nc -z redis 6379; do
+      ((WAIT_COUNT++))
+      
+      if [ $WAIT_COUNT -ge 120 ]; then
+        echo "ERROR: Redis not reachable"
+        exit 1  # ⚠️ SCRIPT EXITS
+      fi
+      
+      sleep 1
+    done
+
+
+Time T+245s (After 120s timeout):
     ┌─────────────────────────────────┐
-    │ Heartbeat Background Process    │
-    │ - Attempts: SETEX heartbeat     │
-    │ - Result: Connection refused    │
-    │ - Action: Retry in 30s          │
+    │ rabbitmq-init.sh EXIT           │
+    │ Container stops                 │
+    │ Docker restart policy triggers  │
     └─────────────────────────────────┘
     
-    Note: Does NOT crash RabbitMQ containers
-          (heartbeat runs in background)
+    ⚠️ rabbitmq2 will NOT join cluster without Redis
 
 
-Time T+60s (Docker Restart):
-    Redis restarts (restart policy)
+Outcome: Cluster Degraded Until Redis Recovers
+═══════════════════════════════════════════════
+┌────────┐            ┌────────┐
+│  RMQ1  │            │  RMQ3  │  Running with 2/3 nodes
+│ MASTER │            │ MEMBER │  Quorum maintained
+└────────┘            └────────┘
+
+           rabbitmq2: Restart loop until Redis available
+
+
+When Redis Recovers:
+═════════════════════
+Time T+300s (Redis back online):
+    ┌───────┐
+    │ Redis │  ✓ Recovered
+    └───────┘
     
-    ┌───────────────────────────┐
-    │ Redis Recovery            │
-    │ - Load AOF file           │
-    │ - Replay operations       │
-    │ - Accept connections      │
-    └───────────────────────────┘
-
-
-Time T+90s (Heartbeats Resume):
-    All RabbitMQ nodes reconnect:
-    - SETEX heartbeat succeeds
-    - Cluster membership restored
-    
-    ┌────────┐  ┌────────┐  ┌────────┐       ┌───────┐
-    │  RMQ1  │  │  RMQ2  │  │  RMQ3  │◄──────┤ Redis │
-    │ MASTER │  │ MEMBER │  │ MEMBER │  ✓    │  ✓    │
-    └────────┘  └────────┘  └────────┘       └───────┘
+    Next rabbitmq2 restart:
+    - Redis check passes
+    - Reads cluster members from Redis
+    - Rejoins cluster successfully
 
 
 Recovery Summary:
 ═════════════════
-RabbitMQ Downtime: 0s (unaffected)
-Redis Downtime: ~60s
-Data Loss: NONE (AOF persistence)
-Impact: Coordination unavailable, but
-        message flow continues normally
+Redis Downtime: Variable (until manual/automatic recovery)
+RabbitMQ2 Behavior: Restart loop, exits on Redis check failure
+Cluster State: 2/3 nodes operational (degraded but functional)
+Impact: rabbitmq2 cannot rejoin until Redis is available
 ```
 
----
-
-## Queue Architecture
-
-### Exchange Topology
+### Scenario 3: PostgreSQL Failure
 
 ```
-                    RabbitMQ Virtual Host: /fog
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  ┌──────────────┐      ┌──────────────┐      ┌────────────┐ │
-│  │tasks.direct  │      │system.fanout │      │results.    │ │
-│  │   (direct)   │      │   (fanout)   │      │   topic    │ │
-│  └──────┬───────┘      └──────┬───────┘      └─────┬──────┘ │
-│         │                     │                    │        │
-│         │ Routing Keys:       │ Broadcasts:        │ Keys:  │
-│         │ - high_priority     │ - All system msgs  │ - *.*  │
-│         │ - normal            │                    │        │
-│         │ - low_priority      │                    │        │
-│         │                     │                    │        │
-│         ▼                     ▼                     ▼       │
-│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐  │
-│  │tasks.high   │      │System Queues│      │results.     │  │
-│  │tasks.normal │      │             │      │  success    │  │
-│  │tasks.low    │      │             │      │results.     │  │
-│  └─────────────┘      └─────────────┘      │  failed     │  │
-│                                            └─────────────┘  │
-│                                                             │
-│  ┌──────────────┐                   ┌────────────┐          │
-│  │metrics.topic │                   │    dlx     │          │
-│  │   (topic)    │                   │  (topic)   │          │
-│  └──────┬───────┘                   └─────┬──────┘          │
-│         │ Keys:                           │                 │
-│         │ - metrics.node.#                │ All failed      │
-│         │                                 │ messages        │
-│         ▼                                 ▼                 │
-│  ┌─────────────┐                   ┌─────────────┐          │
-│  │metrics.node │                   │     dlq     │          │
-│  └─────────────┘                   └─────────────┘          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                  POSTGRESQL FAILURE SCENARIO                    │
+└─────────────────────────────────────────────────────────────────┘
+
+Initial State:
+═════════════
+┌────────┐  ┌────────┐  ┌────────┐       ┌──────────┐
+│  RMQ1  │  │  RMQ2  │  │  RMQ3  │◄──────┤Postgres  │
+│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │    ✓     │
+└────────┘  └────────┘  └────────┘       └──────────┘
+
+
+Event: PostgreSQL Container Crash
+═══════════════════════════════════
+Time T+0s:
+┌────────┐  ┌────────┐  ┌────────┐       ┌──────────┐
+│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   ❌  │Postgres  │
+│ MASTER │  │ MEMBER │  │ MEMBER │       │    ❌    │
+└────────┘  └────────┘  └────────┘       └──────────┘
+
+Impact:
+  ✓ RabbitMQ cluster: CONTINUES OPERATING (no dependency)
+  ✓ Message flow: UNAFFECTED
+  ✓ Quorum queues: UNAFFECTED
+  ✗ Scheduler: Cannot read/write task metadata
+  ✗ Task persistence: Blocked until recovery
+
+
+Time T+60s (Docker Restart):
+    PostgreSQL restarts (restart policy)
+    
+    ┌───────────────────────────┐
+    │ PostgreSQL Recovery       │
+    │ - Load WAL                │
+    │ - Replay transactions     │
+    │ - Accept connections      │
+    └───────────────────────────┘
+
+
+Recovery Summary:
+═════════════════
+PostgreSQL Downtime: ~60s (typical)
+RabbitMQ Impact: NONE (independent operation)
+Scheduler Impact: Cannot persist new tasks during outage
+Data Loss: NONE (WAL recovery)
 ```
-
-### Queue Specifications
-
-#### Task Queues (Quorum Type)
-```json
-{
-  "name": "tasks.high_priority",
-  "type": "quorum",
-  "durable": true,
-  "arguments": {
-    "x-max-length": 10000,
-    "x-overflow": "reject-publish",
-    "x-delivery-limit": 3,
-    "x-dead-letter-exchange": "dlx",
-    "x-dead-letter-routing-key": "task.failed"
-  }
-}
-```
-
-**Features**:
-- **Max capacity**: 10,000 messages
-- **Overflow**: Reject new messages when full
-- **Retry limit**: 3 delivery attempts
-- **DLX**: Failed messages → Dead Letter Exchange
-
-**Priority Levels**:
-1. **high_priority**: Time-sensitive tasks
-2. **normal**: Standard tasks
-3. **low_priority**: Batch/background tasks
-
-#### Result Queues (Quorum Type)
-```json
-{
-  "name": "results.success",
-  "type": "quorum",
-  "durable": true,
-  "arguments": {
-    "x-max-length": 50000,
-    "x-overflow": "drop-head"
-  }
-}
-```
-
-**Features**:
-- **Max capacity**: 50,000 results
-- **Overflow**: Drop oldest results when full
-- **Routing**: Topic-based (`results.success.*`, `results.failed.*`)
-
-#### Metrics Queue (Quorum Type)
-```json
-{
-  "name": "metrics.node",
-  "type": "quorum",
-  "durable": true,
-  "arguments": {
-    "x-max-length": 100000,
-    "x-overflow": "drop-head"
-  }
-}
-```
-
-**Features**:
-- **Max capacity**: 100,000 metrics
-- **Overflow**: Drop oldest metrics
-- **Routing**: `metrics.node.#` (wildcard)
-
-#### Dead Letter Queue
-```json
-{
-  "name": "dlq",
-  "type": "quorum",
-  "durable": true
-}
-```
-
-**Purpose**: Capture messages that:
-- Exceeded retry limit (3 attempts)
-- Rejected by consumers
-- Expired (if TTL set)
 
 ---
 
@@ -1168,6 +978,10 @@ MQ_NODE2_WORKER=worker2
 MQ_NODE2_PASS=worker2_secure_password
 MQ_NODE3_WORKER=worker3
 MQ_NODE3_PASS=worker3_secure_password
+
+# PostgreSQL Configuration
+PG_USER=scheduler
+PG_PASS=your_postgres_password_here
 ```
 
 ### RabbitMQ Configuration (`rabbitmq.conf`)
@@ -1194,38 +1008,114 @@ default_vhost = /fog
 load_definitions = /etc/rabbitmq/definitions.json
 ```
 
-### Redis Configuration (`redis.conf`)
+### PostgreSQL Configuration (`postgresql.conf`)
 
 ```ini
-# Network
-bind 0.0.0.0
-port 6379
+# Connection settings
+listen_addresses = '*'
+port = 5432
+
+# Logging
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d.log'
+log_min_duration_statement = 500
+
+# Checkpoints / WAL
+max_wal_size = '1GB'
+min_wal_size = '80MB'
+checkpoint_timeout = '5min'
 
 # Memory
-maxmemory 512mb
-maxmemory-policy allkeys-lru
+shared_buffers = '256MB'
+work_mem = '4MB'
+maintenance_work_mem = '64MB'
 
-# Persistence
-appendonly yes
-appendfsync everysec
-save ""
-
-# Performance
-io-threads 4
-io-threads-do-reads yes
-
-# Security
-requirepass ${REDIS_PASS}
-rename-command FLUSHDB ""
-rename-command FLUSHALL ""
-rename-command CONFIG ""
+# Other
+max_connections = 100
 ```
+
+---
+
+## Operations & Monitoring
+
+### Essential Commands (via Makefile)
+
+#### Quick Start
+```bash
+make all               # Install deps + start services
+make up                # Start all services (sequenced)
+make down              # Stop all services
+make restart           # Restart services
+make clean             # Remove all data (confirm required)
+```
+
+#### Health Checks
+```bash
+make status            # Show service status
+make health            # Check all services health
+make rabbitmq          # Show RabbitMQ cluster/queues/users
+make redis             # Show Redis info/keys/cluster state
+make postgres          # Show PostgreSQL version and databases
+```
+
+#### Interactive CLI Access
+```bash
+make rabbitmq-cli      # Open RabbitMQ shell
+make redis-cli         # Open Redis CLI
+make postgres-cli      # Open PostgreSQL psql shell
+```
+
+#### Logs & Debugging
+```bash
+make logs              # Recent logs (RabbitMQ, Redis, PostgreSQL)
+make logs-follow       # Follow all logs (live)
+make debug             # Stack debug info
+make monitor           # Live health monitoring (watch)
+```
+
+#### Management Operations
+```bash
+make rabbitmq-ui       # Open RabbitMQ Management UI
+make rabbitmq-purge    # Purge all queues (confirm required)
+make redis-flush       # Delete all Redis data (confirm required)
+make redis-clear-cluster  # Clear cluster state (confirm required)
+make postgres-create-db   # Create schedulerdb
+make postgres-drop-db     # Drop schedulerdb (confirm required)
+```
+
+#### Testing
+```bash
+make test              # Run tests (to be done)
+make test-failover     # Test node recovery
+```
+
+### Health Check Output Example
+
+```bash
+$ make health
+
+Service Health
+rabbitmq1: healthy
+rabbitmq2: healthy
+rabbitmq3: healthy
+
+redis: healthy
+
+Redis Coordinator
+Members: rabbit@rabbitmq1 rabbit@rabbitmq2 rabbit@rabbitmq3
+Master:  rabbit@rabbitmq1
+
+postgres: healthy
+```
+
 ---
 
 ## Support
 
-### System support
-The repo is packed with a make file that contains helpeful commands, at the manage node you can execute most of important commands:
+### System Support
+The repo includes a Makefile with helpful commands. On the manager node:
 ```bash
 cd Optimized-RabbitMQ-Scheduler
 make help
@@ -1235,3 +1125,9 @@ make help
 For issues and questions:
 - GitHub Issues: https://github.com/Crabzie/Optimized-RabbitMQ-Scheduler/issues
 - Email: hamzalagab.tech@gmail.com
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

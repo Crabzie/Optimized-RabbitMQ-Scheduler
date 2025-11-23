@@ -91,7 +91,7 @@ services:
       - "--appendonly"
       - "yes"
       - "--maxmemory"
-      - "512mb"
+      - "1G"
       - "--maxmemory-policy"
       - "allkeys-lru"
       - "--requirepass"

@@ -234,15 +234,16 @@ rabbitmq:
 	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Cluster Status"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null || echo "Failed to get cluster status"; \
 		echo ""; \
 		echo "Queues"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null || echo "Failed to list queues"; \
 		echo ""; \
 		echo "Users"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null || echo "Failed to list users"; \
 	else \
 		echo "rabbitmq1: container not found on host manager1"; \
+		exit 1; \
 	fi
 
 rabbitmq-ui:

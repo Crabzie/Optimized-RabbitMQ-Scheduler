@@ -38,9 +38,9 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ### Project Status
 
-**Infrastructure**: ✅ Production-ready (RabbitMQ cluster, Redis coordination, PostgreSQL persistence)
+**Infrastructure**: Dev-ready (RabbitMQ cluster, Redis coordination, PostgreSQL persistence)
 
-**Application Layer**: 🚧 Under development
+**Application Layer**: Under development
 - **Scheduler**: Core scheduling logic and task distribution (in progress)
 - **Fog Nodes**: Task execution workers and result handlers (in progress)
 
@@ -473,7 +473,7 @@ Step 3: RabbitMQ1 (Primary) Initialization
 │ Wait for Redis   │  nc -z redis 6379
 │ Connectivity     │  - Max 120s (60 attempts)
 └────┬─────────────┘  - Exit if timeout
-     │                 ⚠️  MANDATORY: Redis must be online
+     │                  MANDATORY: Redis must be online
      │
      ▼
 ┌──────────────────┐
@@ -556,8 +556,8 @@ Step 4: RabbitMQ2 (Secondary) Initialization
      ▼
 ┌──────────────────┐
 │ Wait for Redis   │  nc -z redis 6379
-└────┬─────────────┘  ⚠️  MANDATORY: Redis must be online
-     │                   (exits if not found after 120s)
+└────┬─────────────┘  MANDATORY: Redis must be online
+     │                (exits if not found after 120s)
      ▼
 ┌──────────────────┐
 │ Install          │  apk add redis
@@ -670,7 +670,7 @@ until nc -z $REDIS_HOST $REDIS_PORT > /dev/null 2>&1; do
   
   if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
     echo "ERROR: Redis not reachable after $MAX_WAIT seconds"
-    exit 1  # ⚠️ EXITS - Redis is mandatory
+    exit 1  # EXITS - Redis is mandatory
   fi
   
   sleep 1
@@ -698,14 +698,14 @@ Initial State:
 ═════════════
 ┌────────┐  ┌────────┐  ┌────────┐
 │  RMQ1  │  │  RMQ2  │  │  RMQ3  │  All nodes healthy
-│ MASTER │  │ MEMBER │  │ MEMBER │  Heartbeats: ✓ ✓ ✓
+│ MASTER │  │ MEMBER │  │ MEMBER │  Heartbeats: + + +
 └────────┘  └────────┘  └────────┘
 
 Event: rabbitmq2 Container Crash
 ═════════════════════════════════
 Time T+0s:
     ┌────────┐            ┌────────┐
-    │  RMQ1  │     ❌     │  RMQ3  │
+    │  RMQ1  │     x      │  RMQ3  │
     │ MASTER │            │ MEMBER │
     └────────┘            └────────┘
     
@@ -747,7 +747,7 @@ Time T+125s:
     ┌──────────────────────┐
     │ rabbitmq2 Start      │
     │ - Wait for RabbitMQ  │
-    │ - Wait for Redis     │  ⚠️ CRITICAL CHECK
+    │ - Wait for Redis     │  CRITICAL CHECK
     └──────────────────────┘
     
     Redis Check:
@@ -798,7 +798,7 @@ Time T+160s:
 Time T+180s:
     ┌────────┐  ┌────────┐  ┌────────┐
     │  RMQ1  │  │  RMQ2  │  │  RMQ3  │  Cluster restored
-    │ MASTER │  │ MEMBER │  │ MEMBER │  Heartbeats: ✓ ✓ ✓
+    │ MASTER │  │ MEMBER │  │ MEMBER │  Heartbeats: + + +
     └────────┘  └────────┘  └────────┘
 
 
@@ -820,7 +820,7 @@ Initial State:
 ═════════════
 ┌────────┐  ┌────────┐  ┌────────┐       ┌───────┐
 │  RMQ1  │  │  RMQ2  │  │  RMQ3  │◄──────┤ Redis │
-│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │  ✓    │
+│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │  +    │
 └────────┘  └────────┘  └────────┘       └───────┘
 
 
@@ -828,8 +828,8 @@ Event: RabbitMQ2 Crashes + Redis Goes Down
 ════════════════════════════════════════════
 Time T+0s:
 ┌────────┐            ┌────────┐       ┌───────┐
-│  RMQ1  │     ❌     │  RMQ3  │   ❌  │ Redis │
-│ MASTER │            │ MEMBER │       │  ❌   │
+│  RMQ1  │     x      │  RMQ3  │   x   │ Redis │
+│ MASTER │            │ MEMBER │       │  x    │
 └────────┘            └────────┘       └───────┘
 
 
@@ -854,7 +854,7 @@ Time T+125s:
       
       if [ $WAIT_COUNT -ge 120 ]; then
         echo "ERROR: Redis not reachable"
-        exit 1  # ⚠️ SCRIPT EXITS
+        exit 1  # SCRIPT EXITS
       fi
       
       sleep 1
@@ -868,7 +868,7 @@ Time T+245s (After 120s timeout):
     │ Docker restart policy triggers  │
     └─────────────────────────────────┘
     
-    ⚠️ rabbitmq2 will NOT join cluster without Redis
+    rabbitmq2 will NOT join cluster without Redis
 
 
 Outcome: Cluster Degraded Until Redis Recovers
@@ -885,7 +885,7 @@ When Redis Recovers:
 ═════════════════════
 Time T+300s (Redis back online):
     ┌───────┐
-    │ Redis │  ✓ Recovered
+    │ Redis │  Recovered
     └───────┘
     
     Next rabbitmq2 restart:
@@ -913,7 +913,7 @@ Initial State:
 ═════════════
 ┌────────┐  ┌────────┐  ┌────────┐       ┌──────────┐
 │  RMQ1  │  │  RMQ2  │  │  RMQ3  │◄──────┤Postgres  │
-│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │    ✓     │
+│ MASTER │  │ MEMBER │  │ MEMBER │  OK   │          │
 └────────┘  └────────┘  └────────┘       └──────────┘
 
 
@@ -921,8 +921,8 @@ Event: PostgreSQL Container Crash
 ═══════════════════════════════════
 Time T+0s:
 ┌────────┐  ┌────────┐  ┌────────┐       ┌──────────┐
-│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   ❌  │Postgres  │
-│ MASTER │  │ MEMBER │  │ MEMBER │       │    ❌    │
+│  RMQ1  │  │  RMQ2  │  │  RMQ3  │   x   │Postgres  │
+│ MASTER │  │ MEMBER │  │ MEMBER │       │    x     │
 └────────┘  └────────┘  └────────┘       └──────────┘
 
 Impact:

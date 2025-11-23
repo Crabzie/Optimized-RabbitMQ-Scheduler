@@ -108,9 +108,7 @@ services:
     deploy:
       placement:
           constraints:
-            - node.role == manager
-            - node.
-            - node.hostname == manager1
+            - node.labels.manager-master == true
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -136,7 +134,7 @@ services:
     deploy:
       placement:
           constraints:
-            - node.hostname== manager1
+            - node.labels.manager-master == true
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
     command: |
@@ -157,7 +155,7 @@ services:
     deploy:
       placement:
           constraints:
-            - node.hostname == manager2
+            - node.labels.manager-rep1 == true
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
     command: |
@@ -178,7 +176,7 @@ services:
     deploy:
       placement:
           constraints:
-            - node.hostname == manager3
+            - node.labels.manager-rep2 == true
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
     command: |

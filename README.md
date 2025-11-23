@@ -252,17 +252,18 @@ docker swarm join --token <worker-token> <manager1-ip>:2377
 ```
 
 ### 2. Label Worker Nodes
+Commands here are executed from within the master manager
 ```bash
 # Choose a manager host (out of the 3 manager nodes) to be swarm master manager and label it as manager-master
-docker node update --label-add manager-master {hostname}
+docker node update --label-add manager-master=true {hostname}
 # Choose a different manager host (out of the 2 manager nodes left) to be swarm manager replica1 and label it as manager-rep1
-docker node update --label-add manager-rep1 {hostname}
+docker node update --label-add manager-rep1=true {hostname}
 # Label the last manage host to be swarm manager replica2 and label it as manager-rep2
-docker node update --label-add manager-rep2 {hostname}
+docker node update --label-add manager-rep2=true {hostname}
 # On your a worker host label the swarm node as worker1
-docker node update --label-add worker1 {hostname}
+docker node update --label-add worker1=true {hostname}
 # On your second worker host label the swarm node as worker2
-docker node update --label-add worker2 {hostname}
+docker node update --label-add worker2=true {hostname}
 ```
 
 ### 3. Deploy Stack

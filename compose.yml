@@ -8,7 +8,7 @@ configs:
   init_infra:
     file: ./scripts/init_infra.sh
   rabbitmq_healthcheck:
-    file: ./scripts/rabbitmq-healthcheck.sh
+    file: ./scripts/rabbitmq_healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
     

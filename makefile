@@ -69,7 +69,7 @@ up:
 	@echo ""
 	@echo "Step 3: Starting RabbitMQ1 (master)..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
-	@sleep 25
+	@sleep 35
 	@bash -c 'for i in {1..24}; do \
 	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
@@ -87,7 +87,7 @@ up:
 	@echo ""
 	@echo "Step 4: Starting RabbitMQ2..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
-	@sleep 25
+	@sleep 40
 	@bash -c 'for i in {1..24}; do \
 	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
@@ -105,7 +105,7 @@ up:
 	@echo ""
 	@echo "Step 5: Starting RabbitMQ3..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
-	@sleep 25
+	@sleep 40
 	@bash -c 'for i in {1..24}; do \
 	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 	  if [ -n "$$CONTAINER_ID" ]; then \

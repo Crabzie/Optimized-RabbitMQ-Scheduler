@@ -256,20 +256,24 @@ rabbitmq-ui:
 rabbitmq-purge:
 	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
-		echo "Purge all queues? [y/N]" && read ans && [ $${ans:-N} = y ]; \
-		for q in tasks.high_priority tasks.normal tasks.low_priority; do \
-			docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
-		done; \
-		echo "Queues purged"; \
+		echo "Purge all queues? [y/N]" && read ans; \
+		if [ "$${ans:-N}" = "y" ]; then \
+			for q in tasks.high_priority tasks.normal tasks.low_priority; do \
+				docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
+			done; \
+			echo "Queues purged"; \
+		else \
+			echo "Purge cancelled"; \
+		fi; \
 	else \
 		echo "rabbitmq1: container not found on host manager1"; \
 	fi
 
 # Redis
 redis:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
-		echo "=== Redis Info ==="; \
+		echo "Redis Info"; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning INFO server | grep redis_version; \
 		echo ""; \
 		echo "Cluster State"; \
@@ -278,37 +282,37 @@ redis:
 		echo "All Keys"; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning KEYS '*'; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "redis: container not found on host manager1"; \
 	fi
 
 redis-cli:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Connecting to Redis CLI..."; \
 		docker exec -it -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "redis: container not found on host manager1"; \
 	fi
 
 redis-flush:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning FLUSHALL; \
 		echo "Redis flushed"; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "redis: container not found on host manager1"; \
 	fi
 
 redis-clear-cluster:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Clear cluster state? [y/N]" && read ans && [ $${ans:-N} = y ]; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER redis-cli -h redis --no-auth-warning DEL rabbitmq:cluster:members rabbitmq:cluster:master; \
 		docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $$ADMIN_CONTAINER sh -c 'redis-cli -h redis --no-auth-warning KEYS "rabbitmq:node:*:heartbeat" | xargs -r redis-cli -h redis --no-auth-warning DEL'; \
 		echo "Cluster state cleared"; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "redis: container not found on host manager1"; \
 	fi
 
 # Debug & Monitoring

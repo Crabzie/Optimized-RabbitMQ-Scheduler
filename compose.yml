@@ -108,6 +108,8 @@ services:
     deploy:
       placement:
           constraints:
+            - node.role == manager
+            - node.
             - node.hostname == manager1
       restart_policy:
         condition: on-failure
@@ -242,14 +244,14 @@ services:
   #     RABBITMQ_URL: amqp://${MQ_NODE2_WORKER}:${MQ_NODE2_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
   #     REDIS_URL: redis:6379
   #     REDIS_PASSWORD: ${REDIS_PASS}
-  #     NODE_CPU_LIMIT: "1.0"
+  #     NODE_CPU_LIMIT: "0.75"
   #   deploy:
   #     placement:
   #       constraints: [node.labels.fog==2, node.role!=manager]
   #     resources:
   #       limits:
-  #         cpus: '1.0'
-  #         memory: 1024M
+  #         cpus: '0.75'
+  #         memory: 768M
   #   networks:
   #     - fog-network
 
@@ -265,14 +267,14 @@ services:
   #     RABBITMQ_URL: amqp://${MQ_NODE3_WORKER}:${MQ_NODE3_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
   #     REDIS_URL: redis:6379
   #     REDIS_PASSWORD: ${REDIS_PASS}
-  #     NODE_CPU_LIMIT: "0.75"
+  #     NODE_CPU_LIMIT: "1.0"
   #   deploy:
   #     placement:
   #       constraints: [node.labels.fog==3, node.role!=manager]
   #     resources:
   #       limits:
-  #         cpus: '0.75'
-  #         memory: 768M
+  #         cpus: '1.0'
+  #         memory: 1024M
   #   networks:
   #     - fog-network
 

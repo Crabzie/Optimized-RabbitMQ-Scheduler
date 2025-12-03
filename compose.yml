@@ -180,11 +180,6 @@ services:
       - "15672:15672"
     environment:
       <<: *rabbitmq-common-env
-      PG_HOST: postgres
-      PG_PORT: 5432
-      PG_DB: ${PG_DB}
-      PG_PASS: ${PG_PASS}
-      PG_USER: ${PG_USER}
       RABBITMQ_NODENAME: rabbit@rabbitmq1
       CLUSTER_WITH: ""
     deploy:

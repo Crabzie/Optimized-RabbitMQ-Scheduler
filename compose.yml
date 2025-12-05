@@ -5,6 +5,8 @@ configs:
     file: ./config/rabbitmq/rabbitmq.conf
   rabbitmq_definitions:
     file: ./config/rabbitmq/definitions.json
+  rabbitmq_plugins:
+    file: ./config/rabbitmq/enabled_plugins
   init_infra:
     file: ./scripts/init_infra.sh
   rabbitmq_healthcheck:
@@ -48,6 +50,9 @@ x-rabbitmq-base: &rabbitmq-base
       mode: 0444
     - source: rabbitmq_definitions
       target: /etc/rabbitmq/definitions.json
+      mode: 0444
+    - source: rabbitmq_plugins
+      target: /etc/rabbitmq/enabled_plugins
       mode: 0444
     - source: init_infra
       target: /init_infra.sh

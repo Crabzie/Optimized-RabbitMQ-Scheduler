@@ -1,0 +1,58 @@
+apiVersion: 1
+
+providers:
+  - name: 'RabbitMQ Overview'
+    orgId: 1
+    folder: 'RabbitMQ'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/Overview
+      foldersFromFilesStructure: false
+
+  - name: 'RabbitMQ PerfTest'
+    orgId: 1
+    folder: 'RabbitMQ'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/PerfTest
+      foldersFromFilesStructure: false
+
+  - name: 'RabbitMQ Erlang-Distribution'
+    orgId: 1
+    folder: 'RabbitMQ'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/Erlang-Distribution
+      foldersFromFilesStructure: false
+
+  - name: 'RabbitMQ Erlang-Memory-Allocators'
+    orgId: 1
+    folder: 'RabbitMQ'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/Erlang-Memory-Allocators
+      foldersFromFilesStructure: false
+
+  - name: 'RabbitMQ Quorum-Queues-Raft'
+    orgId: 1
+    folder: 'RabbitMQ'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/Quorum-Queues-Raft
+      foldersFromFilesStructure: false
+

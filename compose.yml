@@ -1,5 +1,3 @@
-version: "3.8"
-
 configs:
   rabbitmq_conf:
     file: ./config/rabbitmq/rabbitmq.conf
@@ -13,6 +11,12 @@ configs:
     file: ./scripts/rabbitmq_healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
+  prometheus_conf:
+    file: ./config/prometheus/prometheus.yml
+  grafana_datasources:
+    file: ./config/grafana/datasources/prometheus.yml
+  grafana_dashboards_config:
+    file: ./config/grafana/dashboards/dashboards.yml
     
 volumes:
   rabbitmq1_data:
@@ -20,6 +24,8 @@ volumes:
   rabbitmq3_data:
   redis_data:
   postgres_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   fog-network:
@@ -184,6 +190,7 @@ services:
     hostname: rabbitmq1
     ports:
       - "15672:15672"
+      - "15692:15692"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq1
@@ -201,6 +208,7 @@ services:
     hostname: rabbitmq2
     ports:
       - "15673:15672"
+      - "15693:15692"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq2
@@ -217,6 +225,7 @@ services:
     hostname: rabbitmq3
     ports:
       - "15674:15672"
+      - "15694:15692"
     environment:
       <<: *rabbitmq-common-env
       RABBITMQ_NODENAME: rabbit@rabbitmq3
@@ -227,6 +236,91 @@ services:
             - node.labels.manager-rep2 == true
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
+
+  prometheus:
+    image: prom/prometheus:latest
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+    configs:
+      - source: prometheus_conf
+        target: /etc/prometheus/prometheus.yml
+        mode: 0444
+    networks:
+      - fog-network
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:latest
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    configs:
+      - source: grafana_datasources
+        target: /etc/grafana/provisioning/datasources/prometheus.yml
+        mode: 0444
+      - source: grafana_dashboards_config
+        target: /etc/grafana/provisioning/dashboards/dashboards.yml
+        mode: 0444
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASS}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    networks:
+      - fog-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
 
   # scheduler:
   #   build: ./scheduler

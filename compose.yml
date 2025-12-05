@@ -54,7 +54,7 @@ x-rabbitmq-base: &rabbitmq-base
       mode: 0444
     - source: rabbitmq_plugins
       target: /etc/rabbitmq/enabled_plugins
-      mode: 0444
+      mode: 0644
     - source: init_infra
       target: /init_infra.sh
       mode: 0555

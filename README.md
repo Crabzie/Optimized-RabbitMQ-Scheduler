@@ -192,7 +192,7 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ### 5. Fog Node Workers
 
-**🚧 NOT YET IMPLEMENTED - Placeholder services commented in compose.yml**
+**NOT YET IMPLEMENTED - Placeholder services commented in compose.yml**
 
 When implemented, workers will:
 - Pull tasks from RabbitMQ priority queues

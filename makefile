@@ -87,6 +87,8 @@ up:
 	@echo ""
 	@echo "Step 4: Starting RabbitMQ1 (master) - this takes ~90 seconds..."
 	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
+	@echo "Waiting for container to start..."
+	@sleep 15
 	@bash -c 'WAIT_COUNT=0; \
 	while [ $$WAIT_COUNT -lt 18 ]; do \
 	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \

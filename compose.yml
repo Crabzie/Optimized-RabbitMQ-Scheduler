@@ -254,7 +254,7 @@ services:
     deploy:
       placement:
         constraints:
-          - node.labels.manager-rep1== true
+          - node.labels.manager-rep1 == true
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -293,7 +293,7 @@ services:
     deploy:
       placement:
         constraints:
-          - node.labels.manager-rep2== true
+          - node.labels.manager-rep2 == true
       restart_policy:
         condition: on-failure
         delay: 5s

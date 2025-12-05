@@ -11,12 +11,6 @@ configs:
     file: ./scripts/rabbitmq_healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
-  prometheus_conf:
-    file: ./config/prometheus/prometheus.yml
-  grafana_datasources:
-    file: ./config/grafana/datasources/prometheus.yml
-  grafana_dashboards_config:
-    file: ./config/grafana/dashboards/dashboards.yml
     
 volumes:
   rabbitmq1_data:
@@ -244,10 +238,7 @@ services:
       - "9090:9090"
     volumes:
       - prometheus_data:/prometheus
-    configs:
-      - source: prometheus_conf
-        target: /etc/prometheus/prometheus.yml
-        mode: 0444
+      - ./config/prometheus:/etc/prometheus:ro
     networks:
       - fog-network
     command:
@@ -284,13 +275,7 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-    configs:
-      - source: grafana_datasources
-        target: /etc/grafana/provisioning/datasources/prometheus.yml
-        mode: 0444
-      - source: grafana_dashboards_config
-        target: /etc/grafana/provisioning/dashboards/dashboards.yml
-        mode: 0444
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASS}

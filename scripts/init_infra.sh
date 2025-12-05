@@ -294,19 +294,19 @@ fi
 
 sleep 5
 
-# Apply definitions after cluster is ready
-echo "Applying RabbitMQ definitions..."
-rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
-echo "Definitions imported"
-
-sleep 5
-
 # USER MANAGEMENT
 
 echo "Initializing users and permissions..."
 
 if [[ -z "$CLUSTER_WITH" ]] && [[ "$RABBITMQ_NODENAME" == "rabbit@rabbitmq1" ]]; then
   if ! rabbitmqctl list_users 2>/dev/null | grep -q "${MQ_ADMIN_USER}"; then
+    # Apply definitions after cluster is ready
+    echo "Applying RabbitMQ definitions..."
+    rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+    echo "Definitions imported"
+
+    sleep 5
+
     echo "First boot detected, creating users..."
     
     rabbitmqctl add_user "${MQ_ADMIN_USER}" "${MQ_ADMIN_PASS}" 2>/dev/null || true

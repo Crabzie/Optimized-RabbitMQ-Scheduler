@@ -60,7 +60,7 @@ x-rabbitmq-base: &rabbitmq-base
   entrypoint: ["/bin/bash", "-c"]
   command: |
     "rabbitmq-server &
-     sleep 10
+     sleep 30
      /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
      wait"
   healthcheck:

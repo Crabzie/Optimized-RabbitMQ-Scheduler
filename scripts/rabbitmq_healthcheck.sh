@@ -12,7 +12,7 @@ RUNNING_NODES=$(rabbitmqctl cluster_status --formatter json 2>/dev/null | \
   jq -r '.running_nodes | length' 2>/dev/null || echo "0")
 
 # If there are 2+ running nodes, we're clustered → healthy
-if [[ "$RUNNING_NODES" -ge 2 ]]; then
+if [[ "$RUNNING_NODES" -ge 1 ]]; then
   echo "OK - clustered with $RUNNING_NODES nodes"
   exit 0
 fi

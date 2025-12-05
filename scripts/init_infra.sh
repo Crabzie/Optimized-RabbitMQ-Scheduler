@@ -142,56 +142,60 @@ if [[ -z "$CLUSTER_WITH" ]]; then
   
   echo "This is rabbitmq1 (primary node candidate)..."
   
-  if [ -n "$ACTIVE_MEMBERS" ] && [ "$ACTIVE_MEMBERS" != "$RABBITMQ_NODENAME" ]; then
+  # Filter out THIS node from active members to find OTHER nodes
+  OTHER_MEMBERS=""
+  for member in $ACTIVE_MEMBERS; do
+    if [ "$member" != "$RABBITMQ_NODENAME" ]; then
+      OTHER_MEMBERS="$OTHER_MEMBERS $member"
+    fi
+  done
+  OTHER_MEMBERS=$(echo "$OTHER_MEMBERS" | xargs)
+  
+  if [ -n "$OTHER_MEMBERS" ]; then
     # Other nodes exist - REJOIN
-    echo "Active cluster found in Redis, attempting to rejoin..."
+    echo "Other active members found in Redis: $OTHER_MEMBERS"
+    echo "Attempting to rejoin..."
     
+    REJOINED=false
     # Try to join any active member
-    for member in $ACTIVE_MEMBERS; do
-      if [ "$member" != "$RABBITMQ_NODENAME" ]; then
-        echo "Attempting to join via $member..."
+    for member in $OTHER_MEMBERS; do
+      echo "Attempting to join via $member..."
+      
+      # Verify node is actually reachable
+      if rabbitmqctl -n $member status > /dev/null 2>&1; then
+        echo "Node $member is reachable, joining..."
         
-        # Verify node is actually reachable
-        if rabbitmqctl -n $member status > /dev/null 2>&1; then
-          echo "Node $member is reachable, joining..."
-          
-          rabbitmqctl stop_app
-          rabbitmqctl reset
-          rabbitmqctl join_cluster "$member"
-          rabbitmqctl start_app
-          
-          register_node
-          echo "Rejoined existing cluster via $member"
-          
-          # Start heartbeat background process
-          (
-            while true; do
-              sleep 30
-              $REDIS_CMD SETEX $NODE_HEARTBEAT_KEY 90 "$(date +%s)" > /dev/null 2>&1 || true
-            done
-          ) &
-          
-          exit 0
-        else
-          echo "Node $member not reachable, trying next..."
-        fi
+        rabbitmqctl stop_app
+        rabbitmqctl reset
+        rabbitmqctl join_cluster "$member"
+        rabbitmqctl start_app
+        
+        set_cluster_master "$member"
+        register_node
+        echo "Rejoined existing cluster via $member"
+        
+        REJOINED=true
+        break
+      else
+        echo "Node $member not reachable, trying next..."
       fi
     done
     
-    echo "No active members reachable, falling back to bootstrap..."
+    if [ "$REJOINED" = false ]; then
+      echo "No other members reachable, registering as standalone master..."
+      set_cluster_master "$RABBITMQ_NODENAME"
+      register_node
+    fi
+  else
+    # No other active members - this is FIRST BOOT or sole survivor
+    # DO NOT reset! RabbitMQ already started with definitions loaded
+    echo "No other active cluster members, registering as master..."
+    
+    set_cluster_master "$RABBITMQ_NODENAME"
+    register_node
+    
+    echo "Registered as cluster master"
   fi
-  
-  # No active cluster - BOOTSTRAP
-  echo "No active cluster found, bootstrapping as master..."
-  
-  rabbitmqctl stop_app 2>/dev/null || true
-  rabbitmqctl reset 2>/dev/null || true
-  rabbitmqctl start_app
-  
-  set_cluster_master "$RABBITMQ_NODENAME"
-  register_node
-  
-  echo "Bootstrapped as cluster master"
   
   # Start heartbeat background process
   (

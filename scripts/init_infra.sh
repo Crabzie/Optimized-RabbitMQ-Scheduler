@@ -294,6 +294,14 @@ fi
 
 sleep 5
 
+# Apply definitions after cluster is ready
+echo "Applying RabbitMQ definitions..."
+sleep 5
+rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+echo "Definitions imported"
+
+sleep 5
+
 # USER MANAGEMENT
 
 echo "Initializing users and permissions..."

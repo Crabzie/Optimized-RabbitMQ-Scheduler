@@ -281,6 +281,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASS}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_LOG_LEVEL=info
     networks:
       - fog-network
     healthcheck:

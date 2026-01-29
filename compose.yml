@@ -11,7 +11,7 @@ configs:
     file: ./scripts/rabbitmq_healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
-    
+
 volumes:
   rabbitmq1_data:
   rabbitmq2_data:
@@ -78,10 +78,10 @@ x-rabbitmq-base: &rabbitmq-base
   deploy:
     replicas: 1
     restart_policy:
-          condition: on-failure
-          delay: 10s
-          max_attempts: 3
-          window: 120s
+      condition: on-failure
+      delay: 10s
+      max_attempts: 3
+      window: 120s
     resources:
       limits:
         cpus: "1.0"
@@ -102,7 +102,7 @@ services:
       - "6379:6379"
     networks:
       - fog-network
-    command: 
+    command:
       - redis-server
       - "--appendonly"
       - "yes"
@@ -111,7 +111,7 @@ services:
       - "--maxmemory-policy"
       - "allkeys-lru"
       - "--requirepass"
-      - "${REDIS_PASS}"      
+      - "${REDIS_PASS}"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
       interval: 10s
@@ -120,8 +120,8 @@ services:
       start_period: 10s
     deploy:
       placement:
-          constraints:
-            - node.labels.manager-master == true
+        constraints:
+          - node.labels.manager-master == true
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -191,11 +191,10 @@ services:
       CLUSTER_WITH: ""
     deploy:
       placement:
-          constraints:
-            - node.labels.manager-master == true
+        constraints:
+          - node.labels.manager-master == true
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
-
 
   rabbitmq2:
     <<: *rabbitmq-base
@@ -209,8 +208,8 @@ services:
       CLUSTER_WITH: "rabbit@rabbitmq1"
     deploy:
       placement:
-          constraints:
-            - node.labels.manager-rep1 == true
+        constraints:
+          - node.labels.manager-master == true
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
 
@@ -226,8 +225,8 @@ services:
       CLUSTER_WITH: "rabbit@rabbitmq1"
     deploy:
       placement:
-          constraints:
-            - node.labels.manager-rep2 == true
+        constraints:
+          - node.labels.manager-master == true
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
 
@@ -246,7 +245,15 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/-/healthy",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -285,7 +292,15 @@ services:
     networks:
       - fog-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/api/health",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -307,95 +322,97 @@ services:
           cpus: "0.25"
           memory: 256M
 
+  scheduler:
+    build: ./scheduler
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+      - redis
+    environment:
+      NODE_NAME: ${MQ_ADMIN_USER}
+      RABBITMQ_URL: amqp://${MQ_ADMIN_USER}:${MQ_ADMIN_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
+      REDIS_URL: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+    networks:
+      - fog-network
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
-  # scheduler:
-  #   build: ./scheduler
-  #   depends_on:
-  #     - rabbitmq1
-  #     - rabbitmq2
-  #     - rabbitmq3
-  #     - redis
-  #   environment:
-  #     NODE_NAME: ${MQ_ADMIN_USER}
-  #     RABBITMQ_URL: amqp://${MQ_ADMIN_USER}:${MQ_ADMIN_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
-  #     REDIS_URL: redis:6379
-  #     REDIS_PASSWORD: ${REDIS_PASS}
-  #   networks:
-  #     - fog-network
-  #   deploy:
-  #     placement:
-  #       constraints: [node.role!=manager]
-  #     resources:
-  #       limits:
-  #         cpus: "1.0"
-  #         memory: 1G
+  fog-node-1:
+    build: ./fog-node
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+      - redis
+    environment:
+      NODE_NAME: ${MQ_NODE1_WORKER}
+      RABBITMQ_URL: amqp://${MQ_NODE1_WORKER}:${MQ_NODE1_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
+      REDIS_URL: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      NODE_CPU_LIMIT: "0.5"
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - fog-network
 
-  # fog-node-1:
-  #   build: ./fog-node
-  #   depends_on:
-  #     - rabbitmq1
-  #     - rabbitmq2
-  #     - rabbitmq3
-  #     - redis
-  #   environment:
-  #     NODE_NAME: ${MQ_NODE1_WORKER}
-  #     RABBITMQ_URL: amqp://${MQ_NODE1_WORKER}:${MQ_NODE1_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
-  #     REDIS_URL: redis:6379
-  #     REDIS_PASSWORD: ${REDIS_PASS}
-  #     NODE_CPU_LIMIT: "0.5"
-  #   deploy:
-  #     placement:
-  #       constraints: [node.labels.fog==1, node.role!=manager]
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #   networks:
-  #     - fog-network
+  fog-node-2:
+    build: ./fog-node
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+      - redis
+    environment:
+      NODE_NAME: ${MQ_NODE2_WORKER}
+      RABBITMQ_URL: amqp://${MQ_NODE2_WORKER}:${MQ_NODE2_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
+      REDIS_URL: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      NODE_CPU_LIMIT: "0.75"
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+    networks:
+      - fog-network
 
-  # fog-node-2:
-  #   build: ./fog-node
-  #   depends_on:
-  #     - rabbitmq1
-  #     - rabbitmq2
-  #     - rabbitmq3
-  #     - redis
-  #   environment:
-  #     NODE_NAME: ${MQ_NODE2_WORKER}
-  #     RABBITMQ_URL: amqp://${MQ_NODE2_WORKER}:${MQ_NODE2_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
-  #     REDIS_URL: redis:6379
-  #     REDIS_PASSWORD: ${REDIS_PASS}
-  #     NODE_CPU_LIMIT: "0.75"
-  #   deploy:
-  #     placement:
-  #       constraints: [node.labels.fog==2, node.role!=manager]
-  #     resources:
-  #       limits:
-  #         cpus: '0.75'
-  #         memory: 768M
-  #   networks:
-  #     - fog-network
-
-  # fog-node-3:
-  #   build: ./fog-node
-  #   depends_on:
-  #     - rabbitmq1
-  #     - rabbitmq2
-  #     - rabbitmq3
-  #     - redis
-  #   environment:
-  #     NODE_NAME: ${MQ_NODE3_WORKER}
-  #     RABBITMQ_URL: amqp://${MQ_NODE3_WORKER}:${MQ_NODE3_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
-  #     REDIS_URL: redis:6379
-  #     REDIS_PASSWORD: ${REDIS_PASS}
-  #     NODE_CPU_LIMIT: "1.0"
-  #   deploy:
-  #     placement:
-  #       constraints: [node.labels.fog==3, node.role!=manager]
-  #     resources:
-  #       limits:
-  #         cpus: '1.0'
-  #         memory: 1024M
-  #   networks:
-  #     - fog-network
-
+  fog-node-3:
+    build: ./fog-node
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+      - redis
+    environment:
+      NODE_NAME: ${MQ_NODE3_WORKER}
+      RABBITMQ_URL: amqp://${MQ_NODE3_WORKER}:${MQ_NODE3_PASS}@rabbitmq1:5672,rabbitmq2:5672,rabbitmq3:5672/fog
+      REDIS_URL: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      NODE_CPU_LIMIT: "1.0"
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+    networks:
+      - fog-network

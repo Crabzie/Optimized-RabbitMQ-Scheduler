@@ -345,7 +345,6 @@ redis-cli:
 	fi
 
 redis-flush:
-docker swarm init --advertise-addr <manager1-ip>
 	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Delete ALL Redis data? [y/N]" && read ans && [ $${ans:-N} = y ]; \
@@ -456,7 +455,6 @@ help:
 	@echo ""
 	@echo "PostgreSQL:"
 	@echo "  make postgres          Show PG version and databases"
-docker swarm init --advertise-addr <manager1-ip>
 	@echo "  make postgres-cli      Open psql shell"
 	@echo "  make postgres-create-db   Create schedulerdb"
 	@echo "  make postgres-drop-db     Drop schedulerdb"

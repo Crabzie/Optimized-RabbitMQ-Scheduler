@@ -44,7 +44,7 @@ x-rabbitmq-common-env: &rabbitmq-common-env
   MQ_NODE3_PASS: ${MQ_NODE3_PASS}
 
 x-rabbitmq-base: &rabbitmq-base
-  image: rabbitmq:4.1.6-management-alpine
+  image: rabbitmq:management-alpine
   configs:
     - source: rabbitmq_conf
       target: /etc/rabbitmq/rabbitmq.conf

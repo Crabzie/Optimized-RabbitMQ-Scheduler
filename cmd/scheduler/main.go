@@ -58,11 +58,46 @@ func main() {
 	}
 	zap.L().Info("Successfully connected to the cache server", zap.String("address", appConfig.Redis.Addr))
 
-	_ = baseLogger.Named("Fiber")
+	// Init cache service
+	cacheService, err := redis.New(rootCtx, appConfig.Redis)
+	if err != nil {
+		zap.L().Error("Error initializing cache connection", zap.Error(err))
+		os.Exit(1)
+	}
+	zap.L().Info("Successfully connected to the cache server", zap.String("address", appConfig.Redis.Addr))
+
+	schedulerLogger := baseLogger.Named("Scheduler")
+
+	//
+	// Here is the logic bootsrap
+
+	server, err := bootstrap(ongoingCtx, fiberLogger, handlers..., rabbitmqService, dbService, cacheService)
+	if err != nil {
+		zap.L().Error("Error initializing server", zap.Error(err))
+		os.Exit(1)
+	}
+
+	zap.L().Info("Successfully initiated routes")
+
+
+	// start server
+	go func() {
+		listenAddr := fmt.Sprintf("%s:%s", appConfig.HTTP.Hostname, appConfig.HTTP.Port)
+		zap.L().Info("Starting the HTTP server", zap.String("listen_address", listenAddr))
+
+		if err := server.Listen(listenAddr); err != nil {
+			zap.L().Error("Error starting the HTTP server", zap.Error(err))
+			os.Exit(1)
+		}
+	}()
 
 	// Wait for ctx cancelation
 	<-rootCtx.Done()
 	rootCtxCancel()
+
+	dbService.Close()
+	baseLogger.Sync()
+	cacheService.Client.Close()
 
 	// Wait for signal propagation
 	time.Sleep(_readinessDrainDelay)

@@ -87,7 +87,9 @@ func New() *AppConfig {
 	}
 
 	// Bind the app.name key to the APP_NAME environment variable
-	viper.BindEnv("app.name", "APP_NAME")
+	if err := viper.BindEnv("app.name", "APP_NAME"); err != nil {
+		log.Fatalf("error finding APP_NAME env variable")
+	}
 
 	// Create an instance of AppConfig
 	var config *AppConfig

@@ -45,12 +45,12 @@ deps:
 
 	
 # Service Management
-up:
+# Service Management
+up: docker-build
 	@echo "Starting services sequentially..."
 	@echo ""
 	@echo "Step 1: Deploying stack..."
 	@docker stack deploy -c compose.yml $(PROJECT_NAME)
-	@docker dispatch deploy -c compose.yml $(PROJECT_NAME)
 	@sleep 5
 	@echo ""
 	@echo "Step 2: Waiting for PostgreSQL to be healthy..."
@@ -85,17 +85,16 @@ up:
 	echo "ERROR: Redis failed to become healthy after 2 minutes"; \
 	exit 1'
 	@echo ""
-	@echo "Step 4: Starting RabbitMQ1 (master) - this takes ~90 seconds..."
-	@docker service scale $(PROJECT_NAME)_rabbitmq1=1
+	@echo "Step 4: Starting RabbitMQ - this takes ~60 seconds..."
 	@echo "Waiting for container to start..."
 	@sleep 15
 	@bash -c 'WAIT_COUNT=0; \
-	while [ $$WAIT_COUNT -lt 18 ]; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	while [ $$WAIT_COUNT -lt 30 ]; do \
+	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
-	    if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+	    if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq ping >/dev/null 2>&1; then \
 	      echo ""; \
-	      echo "RabbitMQ1 ready"; \
+	      echo "RabbitMQ ready"; \
 	      exit 0; \
 	    fi; \
 	  fi; \
@@ -104,53 +103,13 @@ up:
 	  ((WAIT_COUNT++)); \
 	done; \
 	echo ""; \
-	echo "RabbitMQ1 still initializing (this is normal, will continue in background)"'
-	@echo ""
-	@echo "Step 5: Starting RabbitMQ2..."
-	@docker service scale $(PROJECT_NAME)_rabbitmq2=1
-	@sleep 30
-	@bash -c 'WAIT_COUNT=0; \
-	while [ $$WAIT_COUNT -lt 12 ]; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
-	  if [ -n "$$CONTAINER_ID" ]; then \
-	    if docker exec $$CONTAINER_ID rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq2"; then \
-	      echo ""; \
-	      echo "RabbitMQ2 joined cluster"; \
-	      exit 0; \
-	    fi; \
-	  fi; \
-	  printf "."; \
-	  sleep 5; \
-	  ((WAIT_COUNT++)); \
-	done; \
-	echo ""; \
-	echo "RabbitMQ2 still joining (this is normal)"'
-	@echo ""
-	@echo "Step 6: Starting RabbitMQ3..."
-	@docker service scale $(PROJECT_NAME)_rabbitmq3=1
-	@sleep 30
-	@bash -c 'WAIT_COUNT=0; \
-	while [ $$WAIT_COUNT -lt 12 ]; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
-	  if [ -n "$$CONTAINER_ID" ]; then \
-	    if docker exec $$CONTAINER_ID rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null | grep -q "rabbit@rabbitmq3"; then \
-	      echo ""; \
-	      echo "RabbitMQ3 joined cluster"; \
-	      exit 0; \
-	    fi; \
-	  fi; \
-	  printf "."; \
-	  sleep 5; \
-	  ((WAIT_COUNT++)); \
-	done; \
-	echo ""; \
-	echo "RabbitMQ3 still joining (this is normal)"'
+	echo "RabbitMQ still initializing (this is normal, will continue in background)"'
 	@echo ""
 	@echo "Services deployed! Checking status..."
 	@sleep 10
 	@$(MAKE) status
 	@echo ""
-	@echo "Tip: Use 'make health' to monitor cluster formation (it takes ~3-4 min total)"
+	@echo "Tip: Use 'make health' to monitor cluster health"
 	@echo "     or   'make logs-follow' to watch logs in real-time"
 
 down:
@@ -182,16 +141,16 @@ status:
 
 health:
 	@echo "Service Health"
-	@for svc in rabbitmq1; do \
-		CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@for svc in rabbitmq; do \
+		CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
 		if [ -n "$$CONTAINER_ID" ]; then \
-			if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
+			if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq ping >/dev/null 2>&1; then \
 				echo "$$svc: healthy"; \
 			else \
 				echo "$$svc: not healthy"; \
 			fi; \
 		else \
-			echo "rabbitmq1: container not found on host manager1"; \
+			echo "rabbitmq: container not found on host manager1"; \
 		fi; \
 	done
 	@echo ""
@@ -240,6 +199,11 @@ dev-node:
 	@NODE_ID=$(NODE_ID) go run ./cmd/node/main.go
 
 # Build
+docker-build:
+	@echo "Building Docker images..."
+	@docker build -f Dockerfile.scheduler -t $(PROJECT_NAME)_scheduler .
+	@docker build -f Dockerfile.node -t $(PROJECT_NAME)_node .
+
 build:
 	@echo "Building binaries..."
 	@mkdir -p ./bin
@@ -254,9 +218,8 @@ test:
 
 test-failover:
 	@echo "Testing failover recovery..."
-	@echo "Force restarting rabbitmq1..."
-	@docker service update --force $(PROJECT_NAME)_rabbitmq1
-	@docker service update --force $(PROJECT_NAME)_rabbitmq1
+	@echo "Force restarting rabbitmq..."
+	@docker service update --force $(PROJECT_NAME)_rabbitmq
 	@sleep 90
 	@$(MAKE) rabbitmq
 
@@ -268,37 +231,37 @@ test-simulation:
 # Logs
 logs:
 	@echo "Recent Logs"
-	@docker service logs $(PROJECT_NAME)_rabbitmq1 --tail 50
+	@docker service logs $(PROJECT_NAME)_rabbitmq --tail 50
 	@docker service logs $(PROJECT_NAME)_redis --tail 30
 	@docker service logs $(PROJECT_NAME)_postgres --tail 50
 
 logs-follow:
-	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_redis $(PROJECT_NAME)_postgres
+	@docker service logs -f $(PROJECT_NAME)_rabbitmq $(PROJECT_NAME)_redis $(PROJECT_NAME)_postgres
 
 # RabbitMQ
 rabbitmq:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Cluster Status"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 cluster_status 2>/dev/null || echo "Failed to get cluster status"; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq cluster_status 2>/dev/null || echo "Failed to get cluster status"; \
 		echo ""; \
 		echo "Queues"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_queues name messages consumers 2>/dev/null || echo "Failed to list queues"; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq list_queues name messages consumers 2>/dev/null || echo "Failed to list queues"; \
 		echo ""; \
 		echo "Users"; \
-		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 list_users 2>/dev/null || echo "Failed to list users"; \
+		docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq list_users 2>/dev/null || echo "Failed to list users"; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "rabbitmq: container not found on host manager1"; \
 		exit 1; \
 	fi
 
 rabbitmq-cli:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
-		echo "Connecting to rabbitmq1 CLI..."; \
+		echo "Connecting to rabbitmq CLI..."; \
 		docker exec -it $$ADMIN_CONTAINER bash || docker exec -it $$ADMIN_CONTAINER sh; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "rabbitmq: container not found on host manager1"; \
 	fi
 
 rabbitmq-ui:
@@ -310,19 +273,19 @@ rabbitmq-ui:
 	echo "Open http://localhost:15672 in your browser"
 
 rabbitmq-purge:
-	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
+	@ADMIN_CONTAINER=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
 	if [ -n "$$ADMIN_CONTAINER" ]; then \
 		echo "Purge all queues? [y/N]" && read ans; \
 		if [ "$${ans:-N}" = "y" ]; then \
 			for q in tasks.high_priority tasks.normal tasks.low_priority; do \
-				docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq1 purge_queue $$q --vhost /fog; \
+				docker exec $$ADMIN_CONTAINER rabbitmqctl -n rabbit@rabbitmq purge_queue $$q --vhost /fog; \
 			done; \
 			echo "Queues purged"; \
 		else \
 			echo "Purge cancelled"; \
 		fi; \
 	else \
-		echo "rabbitmq1: container not found on host manager1"; \
+		echo "rabbitmq: container not found on host manager1"; \
 	fi
 
 # Redis

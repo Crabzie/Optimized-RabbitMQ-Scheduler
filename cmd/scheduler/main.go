@@ -59,20 +59,28 @@ func main() {
 	nodeCoordinator := redisAdapter.NewNodeCoordinator(redisClient, log)
 
 	// RabbitMQ
-	// Build URL from Env or Config (Using Env for sensitive parts if needed, or config map)
-	// For now, assuming standard URI format from config or environment
+	// Build URL from Env or Config
 	rabbitUser := os.Getenv("MQ_ADMIN_USER")
 	rabbitPass := os.Getenv("MQ_ADMIN_PASS")
+	rabbitHost := os.Getenv("MQ_HOST")
+	rabbitPort := os.Getenv("MQ_PORT")
+
 	if rabbitUser == "" {
 		rabbitUser = "admin"
 	}
 	if rabbitPass == "" {
 		rabbitPass = "your_admin_password"
-	} // Fallback to config default if needed
-	// Note: We might want to add RabbitMQ config to appConfig later for clean access
+	}
+	if rabbitHost == "" {
+		rabbitHost = "rabbitmq"
+	}
+	if rabbitPort == "" {
+		rabbitPort = "5672"
+	}
+
 	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
 		rabbitUser, rabbitPass,
-		"rabbitmq1", "5672", // Should be from config in prod
+		rabbitHost, rabbitPort,
 	)
 
 	queueService, err := rabbitmq.NewQueueService(rabbitURL, log)

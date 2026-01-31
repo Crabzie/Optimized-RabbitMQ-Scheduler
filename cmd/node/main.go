@@ -56,18 +56,27 @@ func main() {
 	nodeCoordinator := redisAdapter.NewNodeCoordinator(redisClient, log)
 
 	// RabbitMQ
-	rabbitUser := os.Getenv("MQ_NODE1_WORKER")
-	rabbitPass := os.Getenv("MQ_NODE1_PASS")
+	rabbitUser := os.Getenv("MQ_WORKER_USER")
+	rabbitPass := os.Getenv("MQ_WORKER_PASS")
+	rabbitHost := os.Getenv("MQ_HOST")
+	rabbitPort := os.Getenv("MQ_PORT")
+
 	if rabbitUser == "" {
 		rabbitUser = "guest"
-	} // Defaults if env missing
+	}
 	if rabbitPass == "" {
 		rabbitPass = "guest"
+	}
+	if rabbitHost == "" {
+		rabbitHost = "rabbitmq"
+	}
+	if rabbitPort == "" {
+		rabbitPort = "5672"
 	}
 
 	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
 		rabbitUser, rabbitPass,
-		"rabbitmq1", "5672",
+		rabbitHost, rabbitPort,
 	)
 
 	queueService, err := rabbitmq.NewQueueService(rabbitURL, log)

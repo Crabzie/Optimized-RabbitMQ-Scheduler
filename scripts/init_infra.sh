@@ -131,16 +131,16 @@ if ! rabbitmqctl list_users 2>/dev/null | grep -q "${MQ_ADMIN_USER}"; then
 	rabbitmqctl add_user scheduler_worker SecureWorkerPass! 2>/dev/null || true
 	rabbitmqctl set_user_tags scheduler_worker worker
 
-	# SET PERMISSIONS
-	echo "Setting permissions..."
-	rabbitmqctl set_permissions -p /fog "${MQ_ADMIN_USER}" ".*" ".*" ".*"
-	rabbitmqctl set_permissions -p /fog "${MQ_WORKER_USER}" "" "amq.default" "^tasks\..*$"
-	rabbitmqctl set_permissions -p /fog scheduler_worker "" "amq.default" "^tasks\..*$"
-
-	echo "RabbitMQ initialization complete"
+	echo "Users created"
 else
 	echo "Users already exist"
 fi
+
+# ALWAYS set permissions to ensure they are correct (idempotent)
+echo "Setting permissions..."
+rabbitmqctl set_permissions -p /fog "${MQ_ADMIN_USER}" ".*" ".*" ".*"
+rabbitmqctl set_permissions -p /fog "${MQ_WORKER_USER}" "" "amq.default" "^tasks\..*$"
+rabbitmqctl set_permissions -p /fog scheduler_worker "" "amq.default" "^tasks\..*$"
 
 echo "RabbitMQ initialization complete"
 

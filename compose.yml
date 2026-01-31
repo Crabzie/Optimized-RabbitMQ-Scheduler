@@ -61,6 +61,7 @@ x-rabbitmq-base: &rabbitmq-base
       target: /health/rabbitmq_users_ready.sh
       mode: 0755
   networks:
+    - fog-network
   entrypoint: ["/bin/bash", "-c"]
   command: |
     /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log &

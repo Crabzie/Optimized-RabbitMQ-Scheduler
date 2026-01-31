@@ -9,6 +9,6 @@ rabbitmqctl list_vhosts | grep -q "^/fog$" || exit 1
 
 rabbitmqctl list_permissions -p /fog | grep -q "scheduler_worker" || exit 1
 
-[ -z "$MQWORKERUSER" ] || rabbitmqctl list_permissions -p /fog | grep -q "$MQWORKERUSER"
+[ -z "$MQ_WORKER_USER" ] || rabbitmqctl list_permissions -p /fog | grep -q "$MQ_WORKER_USER"
 
 echo "✅ Users ready!"

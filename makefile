@@ -50,7 +50,7 @@ up:
 	@echo ""
 	@echo "Step 1: Deploying stack..."
 	@docker stack deploy -c compose.yml $(PROJECT_NAME)
-	@docker service scale $(PROJECT_NAME)_rabbitmq1=0 $(PROJECT_NAME)_rabbitmq2=0 $(PROJECT_NAME)_rabbitmq3=0
+	@docker dispatch deploy -c compose.yml $(PROJECT_NAME)
 	@sleep 5
 	@echo ""
 	@echo "Step 2: Waiting for PostgreSQL to be healthy..."
@@ -182,7 +182,7 @@ status:
 
 health:
 	@echo "Service Health"
-	@for svc in rabbitmq1 rabbitmq2 rabbitmq3; do \
+	@for svc in rabbitmq1; do \
 		CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq1"); \
 		if [ -n "$$CONTAINER_ID" ]; then \
 			if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq1 ping >/dev/null 2>&1; then \
@@ -256,8 +256,14 @@ test-failover:
 	@echo "Testing failover recovery..."
 	@echo "Force restarting rabbitmq1..."
 	@docker service update --force $(PROJECT_NAME)_rabbitmq1
+	@docker service update --force $(PROJECT_NAME)_rabbitmq1
 	@sleep 90
 	@$(MAKE) rabbitmq
+
+test-simulation:
+	@echo "Running Traffic Simulation (5 minutes)..."
+	@echo "Ensure you have 'make up' running first!"
+	@go run cmd/simulation/main.go
 
 # Logs
 logs:
@@ -267,7 +273,7 @@ logs:
 	@docker service logs $(PROJECT_NAME)_postgres --tail 50
 
 logs-follow:
-	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_rabbitmq2 $(PROJECT_NAME)_rabbitmq3 $(PROJECT_NAME)_redis $(PROJECT_NAME)_postgres
+	@docker service logs -f $(PROJECT_NAME)_rabbitmq1 $(PROJECT_NAME)_redis $(PROJECT_NAME)_postgres
 
 # RabbitMQ
 rabbitmq:
@@ -468,5 +474,7 @@ help:
 	@echo "Maintenance:"
 	@echo "  make restart           Restart services"
 	@echo "  make clean             Remove all data"
+	@echo "  make clean             Remove all data"
 	@echo "  make test-failover     Test node recovery"
+	@echo "  make test-simulation   Run 5-min traffic simulation"
 

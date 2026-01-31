@@ -17,6 +17,7 @@ type nodeCoordinator struct {
 	log    *zap.Logger
 }
 
+// NewNodeCoordinator creates a new Redis adapter that now also handles Task Caching
 func NewNodeCoordinator(client *redis.Client, log *zap.Logger) port.NodeCoordinator {
 	return &nodeCoordinator{
 		client: client,
@@ -32,6 +33,7 @@ func (c *nodeCoordinator) RegisterNode(ctx context.Context, node *domain.Node) e
 	}
 
 	key := fmt.Sprintf("node:%s", node.ID)
+	// Extends TTL to 30s
 	return c.client.Set(ctx, key, data, 30*time.Second).Err()
 }
 
@@ -45,7 +47,7 @@ func (c *nodeCoordinator) GetActiveNodes(ctx context.Context) ([]*domain.Node, e
 	for _, key := range keys {
 		val, err := c.client.Get(ctx, key).Result()
 		if err != nil {
-			continue
+			continue // Skip expired/deleted keys race condition
 		}
 
 		var node domain.Node

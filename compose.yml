@@ -14,8 +14,6 @@ configs:
 
 volumes:
   rabbitmq1_data:
-  rabbitmq2_data:
-  rabbitmq3_data:
   redis_data:
   postgres_data:
   prometheus_data:
@@ -403,5 +401,29 @@ services:
         limits:
           cpus: "0.75"
           memory: 768M
+    networks:
+      - fog-network
+
+  fog-node-3:
+    build: 
+      context: .
+      dockerfile: Dockerfile.node
+    depends_on:
+      - rabbitmq1
+      - redis
+    environment:
+      NODE_NAME: ${MQ_NODE3_WORKER}
+      MQ_NODE1_WORKER: ${MQ_NODE3_WORKER}
+      MQ_NODE1_PASS: ${MQ_NODE3_PASS}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+    deploy:
+      placement:
+        constraints:
+          - node.labels.worker3 == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
     networks:
       - fog-network

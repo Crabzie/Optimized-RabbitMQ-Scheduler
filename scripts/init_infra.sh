@@ -110,33 +110,34 @@ sleep 5
 echo "Initializing users and permissions..."
 
 if ! rabbitmqctl list_users 2>/dev/null | grep -q "${MQ_ADMIN_USER}"; then
-	# Apply definitions after cluster is ready
-	echo "Applying RabbitMQ definitions..."
-	rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
-	echo "Definitions imported"
+	# CREATE /fog VHOST FIRST (PERSISTENT)
+	echo "Creating /fog vhost..."
+	rabbitmqctl add_vhost /fog 2>/dev/null || true
+	sleep 2
 
+	# IMPORT DEFINITIONS (queues, exchanges, bindings)
+	echo "Importing RabbitMQ definitions..."
+	rabbitmqctl import_definitions /etc/rabbitmq/definitions.json 2>/dev/null || true
 	sleep 5
 
-	echo "First boot detected, creating users..."
-
+	# CREATE USERS
+	echo "Creating users..."
 	rabbitmqctl add_user "${MQ_ADMIN_USER}" "${MQ_ADMIN_PASS}" 2>/dev/null || true
 	rabbitmqctl set_user_tags "${MQ_ADMIN_USER}" administrator
 
 	rabbitmqctl add_user "${MQ_WORKER_USER}" "${MQ_WORKER_PASS}" 2>/dev/null || true
 	rabbitmqctl set_user_tags "${MQ_WORKER_USER}" worker
 
-	echo "Creating /fog vhost..."
-	rabbitmqctl add_vhost /fog 2>/dev/null || true
-	rabbitmqctl set_vhost_limits -p /fog '{"max-connections": 1000, "max-queues": 500}' 2>/dev/null || true
+	rabbitmqctl add_user scheduler_worker SecureWorkerPass! 2>/dev/null || true
+	rabbitmqctl set_user_tags scheduler_worker worker
 
+	# SET PERMISSIONS
+	echo "Setting permissions..."
 	rabbitmqctl set_permissions -p /fog "${MQ_ADMIN_USER}" ".*" ".*" ".*"
-	# All workers use the same user now
 	rabbitmqctl set_permissions -p /fog "${MQ_WORKER_USER}" "" "amq.default" "^tasks\..*$"
+	rabbitmqctl set_permissions -p /fog scheduler_worker "" "amq.default" "^tasks\..*$"
 
-	echo "Users created"
-
-	echo "Applying RabbitMQ definitions..."
-	rabbitmqctl import_definitions /etc/rabbitmq/definitions.json 2>/dev/null || echo "Definitions already applied"
+	echo "RabbitMQ initialization complete"
 else
 	echo "Users already exist"
 fi

@@ -1,0 +1,25 @@
+# Build Stage
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Build the binary
+RUN go build -o /app/bin/node ./cmd/node
+
+# Run Stage
+FROM alpine:latest
+
+WORKDIR /app
+
+# Install dependencies
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /app/bin/node /app/node
+COPY --from=builder /app/config.yaml /app/config.yaml
+
+CMD ["./node"]

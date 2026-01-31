@@ -61,13 +61,10 @@ x-rabbitmq-base: &rabbitmq-base
       target: /health/rabbitmq_users_ready.sh
       mode: 0755
   networks:
-    - fog-network
   entrypoint: ["/bin/bash", "-c"]
   command: |
-    rabbitmq-server &
-    sleep 30
-    /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
-    wait
+    /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log &
+    exec rabbitmq-server
   healthcheck:
     test: ["CMD", "/health/rabbitmq_users_ready.sh"]
     interval: 30s

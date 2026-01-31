@@ -7,6 +7,12 @@ if ! rabbitmq-diagnostics check_running >/dev/null 2>&1; then
   exit 1
 fi
 
+# Check if initialization is complete
+if [ ! -f /var/lib/rabbitmq/.init_complete ]; then
+  echo "Initialization not complete"
+  exit 1
+fi
+
 # Node is running - that's healthy
-echo "OK - node is running"
+echo "OK - node is running and initialized"
 exit 0

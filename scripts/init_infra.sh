@@ -140,6 +140,7 @@ rabbitmqctl set_permissions -p /fog "${MQ_WORKER_USER}" ".*" ".*" ".*"
 echo "Users and permissions configured"
 
 echo "RabbitMQ initialization complete"
+touch /var/lib/rabbitmq/.init_complete
 
 # Keep process alive to maintain heartbeat
 wait

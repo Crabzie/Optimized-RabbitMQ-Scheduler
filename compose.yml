@@ -64,10 +64,10 @@ x-rabbitmq-base: &rabbitmq-base
     - fog-network
   entrypoint: ["/bin/bash", "-c"]
   command: |
-    "rabbitmq-server &
-     sleep 30
-     /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
-     wait"
+    rabbitmq-server &
+    sleep 30
+    /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
+    wait
   healthcheck:
     test: ["CMD", "/health/rabbitmq_users_ready.sh"]
     interval: 30s

@@ -11,6 +11,8 @@ configs:
     file: ./scripts/rabbitmq_healthcheck.sh
   postgres_conf:
     file: ./config/postgres/postgresql.conf
+  rabbitmq_users_ready:
+    file: ./scripts/rabbitmq_users_ready.sh
 
 volumes:
   rabbitmq1_data:
@@ -55,6 +57,9 @@ x-rabbitmq-base: &rabbitmq-base
     - source: rabbitmq_healthcheck
       target: /health/rabbitmq_healthcheck.sh
       mode: 0555
+    - source: rabbitmq_users_ready
+      target: /health/rabbitmq_users_ready.sh
+      mode: 0755
   networks:
     - fog-network
   entrypoint: ["/bin/bash", "-c"]
@@ -64,10 +69,10 @@ x-rabbitmq-base: &rabbitmq-base
      /bin/bash /init_infra.sh 2>&1 | tee /var/log/init.log
      wait"
   healthcheck:
-    test: ["CMD", "/health/rabbitmq_healthcheck.sh"]
+    test: ["CMD", "/health/rabbitmq_users_ready.sh"]
     interval: 30s
     timeout: 15s
-    retries: 5
+    retries: 10
     start_period: 180s
   deploy:
     replicas: 1

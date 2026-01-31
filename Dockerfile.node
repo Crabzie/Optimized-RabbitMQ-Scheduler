@@ -21,5 +21,6 @@ RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/bin/node /app/node
 COPY --from=builder /app/config.yaml /app/config.yaml
+COPY --from=builder /app/config/storage/postgresql/migrations /app/migrations
 
 CMD ["./node"]

@@ -78,7 +78,7 @@ func main() {
 		rabbitPort = "5672"
 	}
 
-	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/fog",
 		rabbitUser, rabbitPass,
 		rabbitHost, rabbitPort,
 	)

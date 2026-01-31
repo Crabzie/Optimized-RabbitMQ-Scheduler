@@ -2,106 +2,105 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/logger"
-	postgres "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/storage/postgresql"
-	redis "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/storage/redis"
+	postgresConfig "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/storage/postgresql"
 	config "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/utils"
+	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/adapter/monitoring/prometheus"
+	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/adapter/queue/rabbitmq"
+	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/adapter/storage/postgres"
+	redisAdapter "github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/adapter/storage/redis"
+	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/core/service"
+	redigo "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-// _shutdownPeriod is time to wait before gracefully shutting server
-// _shutdownHardPeriod is time to wait beofre force closing server
-// _readinessDrainDelay is time to sleep while context shutdown message propagate
 const (
-	_shutdownPeriod      = 10 * time.Second
-	_shutdownHardPeriod  = 3 * time.Second
-	_readinessDrainDelay = 5 * time.Second
+	_shutdownPeriod = 10 * time.Second
 )
 
 func main() {
 	rootCtx, rootCtxCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer rootCtxCancel()
 
-	// Init config
+	// 1. Init Config & Logger
 	appConfig := config.New()
-	baseLogger := logger.Build(appConfig.Logger)
-	zap.L().Debug("Logger Builded successfully")
+	log := logger.Build(appConfig.Logger)
+	zap.ReplaceGlobals(log)
+	log.Info("Starting Scheduler Application")
 
-	zap.L().Info("Starting the application", zap.String("app", appConfig.App.Name), zap.String("env", appConfig.App.Env), zap.String("owner", appConfig.App.Owner))
+	// 2. Init Adapters
 
-	// Init database service
-	dbLogger := baseLogger.Named("DB")
-	dbService, err := postgres.New(rootCtx, appConfig.DB, dbLogger)
+	// Postgres
+	dbService, err := postgresConfig.New(rootCtx, appConfig.DB, log)
 	if err != nil {
-		zap.L().Error("Error initializing database connection", zap.Error(err))
-		os.Exit(1)
+		log.Fatal("Failed to init Postgres", zap.Error(err))
 	}
-	zap.L().Info("Successfully connected to the database", zap.String("db", appConfig.DB.Connection))
-
-	// Migrate database
+	// Migrate DB
 	if err := dbService.Migrate(); err != nil {
-		zap.L().Error("Error migrating database", zap.Error(err))
-		os.Exit(1)
+		log.Fatal("Failed to migrate DB", zap.Error(err))
 	}
-	zap.L().Info("Successfully migrated the database")
+	taskRepo := postgres.NewTaskRepository(dbService.Pool, log)
 
-	// Init cache service
-	_, err = redis.New(rootCtx, appConfig.Redis)
+	// Redis
+	redisClient := redigo.NewClient(&redigo.Options{
+		Addr:     appConfig.Redis.Addr,
+		Password: appConfig.Redis.Password,
+		DB:       0,
+	})
+	if err := redisClient.Ping(rootCtx).Err(); err != nil {
+		log.Fatal("Failed to init Redis", zap.Error(err))
+	}
+	nodeCoordinator := redisAdapter.NewNodeCoordinator(redisClient, log)
+
+	// RabbitMQ
+	// Build URL from Env or Config (Using Env for sensitive parts if needed, or config map)
+	// For now, assuming standard URI format from config or environment
+	rabbitUser := os.Getenv("MQ_ADMIN_USER")
+	rabbitPass := os.Getenv("MQ_ADMIN_PASS")
+	if rabbitUser == "" {
+		rabbitUser = "admin"
+	}
+	if rabbitPass == "" {
+		rabbitPass = "your_admin_password"
+	} // Fallback to config default if needed
+	// Note: We might want to add RabbitMQ config to appConfig later for clean access
+	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+		rabbitUser, rabbitPass,
+		"rabbitmq1", "5672", // Should be from config in prod
+	)
+
+	queueService, err := rabbitmq.NewQueueService(rabbitURL, log)
 	if err != nil {
-		zap.L().Error("Error initializing cache connection", zap.Error(err))
-		os.Exit(1)
-	}
-	zap.L().Info("Successfully connected to the cache server", zap.String("address", appConfig.Redis.Addr))
-
-	// Init cache service
-	cacheService, err := redis.New(rootCtx, appConfig.Redis)
-	if err != nil {
-		zap.L().Error("Error initializing cache connection", zap.Error(err))
-		os.Exit(1)
-	}
-	zap.L().Info("Successfully connected to the cache server", zap.String("address", appConfig.Redis.Addr))
-
-	schedulerLogger := baseLogger.Named("Scheduler")
-
-	//
-	// Here is the logic bootsrap
-
-	server, err := bootstrap(ongoingCtx, fiberLogger, handlers..., rabbitmqService, dbService, cacheService)
-	if err != nil {
-		zap.L().Error("Error initializing server", zap.Error(err))
-		os.Exit(1)
+		// Log but maybe not fatal if we want to retry? For now fatal.
+		log.Fatal("Failed to init RabbitMQ", zap.Error(err), zap.String("url", rabbitURL))
 	}
 
-	zap.L().Info("Successfully initiated routes")
+	// Prometheus
+	promURL := "http://prometheus:9090" // Container name
+	monitorService := prometheus.NewMonitoringService(promURL, log)
 
+	// 3. Init Service
+	scheduler := service.NewSchedulerService(taskRepo, nodeCoordinator, monitorService, queueService, log)
 
-	// start server
-	go func() {
-		listenAddr := fmt.Sprintf("%s:%s", appConfig.HTTP.Hostname, appConfig.HTTP.Port)
-		zap.L().Info("Starting the HTTP server", zap.String("listen_address", listenAddr))
+	// 4. Start Loops
+	log.Info("Services initialized. Starting Scheduler Loop...")
+	go scheduler.StartScheduler(rootCtx, 10*time.Second)
 
-		if err := server.Listen(listenAddr); err != nil {
-			zap.L().Error("Error starting the HTTP server", zap.Error(err))
-			os.Exit(1)
-		}
-	}()
-
-	// Wait for ctx cancelation
+	// 5. Wait for Shutdown
 	<-rootCtx.Done()
-	rootCtxCancel()
+	log.Info("Shutting down...")
 
+	// Cleanup
 	dbService.Close()
-	baseLogger.Sync()
-	cacheService.Client.Close()
+	redisClient.Close()
 
-	// Wait for signal propagation
-	time.Sleep(_readinessDrainDelay)
-	zap.L().Info("Readiness check propagated, now waiting for ongoing requests to finish")
-
-	zap.L().Info("Graceful shutdown complete.")
+	// Wait for grace period
+	time.Sleep(1 * time.Second)
+	log.Info("Shutdown complete")
 }

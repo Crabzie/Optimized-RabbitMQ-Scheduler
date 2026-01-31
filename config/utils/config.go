@@ -91,6 +91,17 @@ func New() *AppConfig {
 		log.Fatalf("error finding APP_NAME env variable")
 	}
 
+	// Bind DB variables
+	viper.BindEnv("db.host", "PG_HOST")
+	viper.BindEnv("db.port", "PG_PORT")
+	viper.BindEnv("db.user", "PG_USER")
+	viper.BindEnv("db.password", "PG_PASS")
+	viper.BindEnv("db.name", "PG_DB")
+
+	// Bind Redis variables
+	viper.BindEnv("redis.addr", "REDIS_ADDR")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+
 	// Create an instance of AppConfig
 	var config *AppConfig
 	if err := viper.Unmarshal(&config); err != nil {

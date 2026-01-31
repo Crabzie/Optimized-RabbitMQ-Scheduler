@@ -310,20 +310,83 @@ services:
           cpus: "1.0"
           memory: 1G
 
-  fog-node:
+  fog-node-1:
     image: ${PROJECT_NAME}_node
     depends_on:
       - rabbitmq
       - redis
     environment:
+      NODE_NAME: "fog-node-1"
       MQ_WORKER_USER: ${MQ_WORKER_USER}
       MQ_WORKER_PASS: ${MQ_WORKER_PASS}
       MQ_HOST: rabbitmq
       MQ_PORT: 5672
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ${REDIS_PASS}
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ${PG_USER}
+      PG_PASS: ${PG_PASS}
+      PG_DB: ${PG_DB}
     deploy:
-      replicas: 3
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    networks:
+      - fog-network
+
+  fog-node-2:
+    image: ${PROJECT_NAME}_node
+    depends_on:
+      - rabbitmq
+      - redis
+    environment:
+      NODE_NAME: "fog-node-2"
+      MQ_WORKER_USER: ${MQ_WORKER_USER}
+      MQ_WORKER_PASS: ${MQ_WORKER_PASS}
+      MQ_HOST: rabbitmq
+      MQ_PORT: 5672
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ${PG_USER}
+      PG_PASS: ${PG_PASS}
+      PG_DB: ${PG_DB}
+    deploy:
+      placement:
+        constraints:
+          - node.labels.manager-master == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    networks:
+      - fog-network
+
+  fog-node-3:
+    image: ${PROJECT_NAME}_node
+    depends_on:
+      - rabbitmq
+      - redis
+    environment:
+      NODE_NAME: "fog-node-3"
+      MQ_WORKER_USER: ${MQ_WORKER_USER}
+      MQ_WORKER_PASS: ${MQ_WORKER_PASS}
+      MQ_HOST: rabbitmq
+      MQ_PORT: 5672
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ${PG_USER}
+      PG_PASS: ${PG_PASS}
+      PG_DB: ${PG_DB}
+    deploy:
       placement:
         constraints:
           - node.labels.manager-master == true

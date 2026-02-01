@@ -105,6 +105,9 @@ up: docker-build
 	echo ""; \
 	echo "RabbitMQ still initializing (this is normal, will continue in background)"'
 	@echo ""
+	@echo "Step 5: Scaling up application services..."
+	@docker service scale $(PROJECT_NAME)_scheduler=1 $(PROJECT_NAME)_fog-node-1=1 $(PROJECT_NAME)_fog-node-2=1 $(PROJECT_NAME)_fog-node-3=1
+	@echo ""
 	@echo "Services deployed! Checking status..."
 	@sleep 10
 	@$(MAKE) status

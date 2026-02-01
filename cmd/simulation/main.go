@@ -24,14 +24,17 @@ func main() {
 	// 1. Init Config & Logger
 	appConfig := config.New()
 	log.Print("Starting Scheduler Application")
+	log.Print("DEBUG: Config loaded:", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		appConfig.DB.User, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+	log.Print("DEBUG: ConnStr built:", connStr[:50]+"...")
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
+	log.Print("DEBUG: sql.Open success")
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {

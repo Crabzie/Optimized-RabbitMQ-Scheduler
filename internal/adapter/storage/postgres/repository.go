@@ -33,9 +33,10 @@ func (r *taskRepository) Save(ctx context.Context, task *domain.Task) error {
 		task.RequiredCPU, task.RequiredMemory, task.Status, task.CreatedAt, task.UpdatedAt)
 
 	if err != nil {
-		r.log.Error("Failed to save task", zap.Error(err))
+		r.log.Error("Failed to save task to DB", zap.String("task_id", task.ID), zap.Error(err))
 		return err
 	}
+	r.log.Info("Task saved to DB", zap.String("task_id", task.ID), zap.String("status", string(task.Status)))
 	return nil
 }
 
@@ -53,6 +54,14 @@ func (r *taskRepository) GetByID(ctx context.Context, id string) (*domain.Task, 
 func (r *taskRepository) UpdateStatus(ctx context.Context, id string, status domain.TaskStatus, nodeID string) error {
 	query := `UPDATE tasks SET status = $1, assigned_node_id = $2, updated_at = $3 WHERE id = $4`
 	_, err := r.db.Exec(ctx, query, status, nodeID, time.Now(), id)
+	if err == nil {
+		r.log.Info("Task status updated in DB",
+			zap.String("task_id", id),
+			zap.String("status", string(status)),
+			zap.String("node_id", nodeID))
+	} else {
+		r.log.Error("Failed to update task status in DB", zap.String("task_id", id), zap.Error(err))
+	}
 	return err
 }
 

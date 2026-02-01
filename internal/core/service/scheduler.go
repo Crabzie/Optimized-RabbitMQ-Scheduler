@@ -71,7 +71,9 @@ func (s *schedulerService) SchedulePendingTasks(ctx context.Context) error {
 		return nil
 	}
 
-	s.log.Debug("Found pending tasks", zap.Int("count", len(tasks)))
+	if len(tasks) > 0 {
+		s.log.Info("Scheduler found pending tasks", zap.Int("count", len(tasks)))
+	}
 
 	// 2. Get Active Nodes
 	nodes, err := s.coordinator.GetActiveNodes(ctx)
@@ -137,10 +139,14 @@ func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task
 
 		cpuUsage, memUsage, err := s.monitor.GetNodeMetrics(ctx, node.ID)
 		if err != nil {
-			s.log.Warn("Failed to get metrics for node", zap.String("node_id", node.ID), zap.Error(err))
-			// Assume worst case or skip? Let's skip for safety
+			s.log.Warn("Failed to get metrics for node, skipping", zap.String("node_id", node.ID), zap.Error(err))
 			continue
 		}
+
+		s.log.Debug("Evaluated node capacity",
+			zap.String("node_id", node.ID),
+			zap.Float64("used_cpu", cpuUsage),
+			zap.Float64("used_mem", memUsage))
 
 		node.UsedCPU = cpuUsage
 		node.UsedMemory = memUsage

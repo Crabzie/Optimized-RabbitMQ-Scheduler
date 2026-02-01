@@ -114,7 +114,10 @@ func (w *workerService) heartbeatLoop(ctx context.Context) {
 }
 
 func (w *workerService) processTask(task *domain.Task) error {
-	w.log.Info("Processing Task...", zap.String("id", task.ID), zap.String("cmd", fmt.Sprintf("%v", task.Command)))
+	w.log.Info("Worker received task from queue",
+		zap.String("task_id", task.ID),
+		zap.String("image", task.Image),
+		zap.Int("priority", task.Priority))
 
 	// 1. Update Status to RUNNING
 	ctx := context.Background() // New context for DB op
@@ -134,7 +137,7 @@ func (w *workerService) processTask(task *domain.Task) error {
 		return err
 	}
 
-	w.log.Info("Task Completed", zap.String("id", task.ID))
+	w.log.Info("Task finished successfully", zap.String("task_id", task.ID))
 	return nil
 }
 

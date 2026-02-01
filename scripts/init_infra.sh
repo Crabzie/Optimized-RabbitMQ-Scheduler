@@ -9,9 +9,9 @@ done
 
 echo "RabbitMQ is up. Initializing configuration..."
 
-# 1. CREATE /fog VHOST (Idempotent)
-echo "Creating /fog vhost..."
-rabbitmqctl add_vhost /fog 2>/dev/null || true
+# 1. CREATE fog VHOST (Idempotent)
+echo "Creating fog vhost..."
+rabbitmqctl add_vhost fog 2>/dev/null || true
 
 # 2. IMPORT DEFINITIONS (Queues, Exchanges)
 echo "Importing RabbitMQ definitions..."
@@ -41,11 +41,11 @@ rabbitmqctl set_user_tags scheduler_worker worker
 echo "Setting permissions..."
 
 # Admin gets everything
-rabbitmqctl set_permissions -p /fog "${MQ_ADMIN_USER}" ".*" ".*" ".*"
+rabbitmqctl set_permissions -p fog "${MQ_ADMIN_USER}" ".*" ".*" ".*"
 
 # Workers get access to tasks and default exchange
 # Note: Using ".*" ".*" ".*" for workers temporarily to eliminate permission issues during debugging
-rabbitmqctl set_permissions -p /fog "${MQ_WORKER_USER}" ".*" ".*" ".*"
-rabbitmqctl set_permissions -p /fog scheduler_worker ".*" ".*" ".*"
+rabbitmqctl set_permissions -p fog "${MQ_WORKER_USER}" ".*" ".*" ".*"
+rabbitmqctl set_permissions -p fog scheduler_worker ".*" ".*" ".*"
 
 echo "RabbitMQ initialization complete."

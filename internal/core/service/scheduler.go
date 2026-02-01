@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -151,7 +152,7 @@ func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task
 			zap.Float64("used_cpu", cpuUsage),
 			zap.Float64("used_mem", memUsage))
 
-		node.UsedCPU = cpuUsage
+		node.UsedCPU = (cpuUsage / 100.0) * node.TotalCPU
 		node.UsedMemory = memUsage
 
 		// Check Constraints
@@ -188,7 +189,7 @@ func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task
 	}
 
 	if len(candidates) == 0 {
-		return nil, context.DeadlineExceeded // Or custom error "No node found"
+		return nil, fmt.Errorf("no suitable node found (all nodes at capacity)")
 	}
 
 	// Sort Descending

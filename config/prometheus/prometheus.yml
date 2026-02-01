@@ -7,21 +7,21 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'rabbitmq-node1'
+  - job_name: 'rabbitmq'
     static_configs:
-      - targets: ['rabbitmq1:15692']
+      - targets: ['rabbitmq:15692']
         labels:
-          node: rabbitmq1
+          node: rabbitmq
 
 
-  - job_name: 'fog-node-1'
+  - job_name: 'fog-nodes'
     static_configs:
       - targets: ['fog-node-1:2112']
         labels:
-          instance: worker1
-
-  - job_name: 'fog-node-2'
-    static_configs:
+          instance: fog-node-1
       - targets: ['fog-node-2:2112']
         labels:
-          instance: worker2
+          instance: fog-node-2
+      - targets: ['fog-node-3:2112']
+        labels:
+          instance: fog-node-3

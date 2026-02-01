@@ -176,13 +176,11 @@ services:
 
   rabbitmq:
     <<: *rabbitmq-base
-    hostname: rabbitmq
     ports:
       - "15672:15672"
       - "5672:5672"
     environment:
       <<: *rabbitmq-common-env
-      RABBITMQ_NODENAME: rabbit@rabbitmq
     deploy:
       placement:
         constraints:

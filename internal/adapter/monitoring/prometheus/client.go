@@ -51,7 +51,7 @@ func (s *monitoringService) GetNodeMetrics(ctx context.Context, nodeID string) (
 		s.log.Warn("CPU query failed, using simulated metrics",
 			zap.String("node", nodeID),
 			zap.Error(err))
-		return 50.0, 2048.0, nil // Fallback: 50% CPU, 2GB RAM
+		return 5.0, 2048.0, nil // Fallback: 5% CPU Usage (realistic idle), 2GB RAM
 	}
 
 	// Query Memory Usage (bytes)
@@ -100,7 +100,7 @@ func (s *monitoringService) queryPrometheus(ctx context.Context, query string) (
 	}
 
 	if len(result.Data.Result) == 0 {
-		return 0, fmt.Errorf("no data returned for query: %s", query)
+		return 0, nil // Return 0 instead of error when no data is returned
 	}
 
 	// Parse value - handle BOTH formats

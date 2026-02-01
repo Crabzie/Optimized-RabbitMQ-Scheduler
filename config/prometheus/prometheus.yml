@@ -13,14 +13,15 @@ scrape_configs:
         labels:
           node: rabbitmq1
 
-  - job_name: 'rabbitmq-node2'
-    static_configs:
-      - targets: ['rabbitmq2:15692']
-        labels:
-          node: rabbitmq2
 
-  - job_name: 'rabbitmq-node3'
+  - job_name: 'fog-node-1'
     static_configs:
-      - targets: ['rabbitmq3:15692']
+      - targets: ['fog-node-1:2112']
         labels:
-          node: rabbitmq3
+          instance: worker1
+
+  - job_name: 'fog-node-2'
+    static_configs:
+      - targets: ['fog-node-2:2112']
+        labels:
+          instance: worker2

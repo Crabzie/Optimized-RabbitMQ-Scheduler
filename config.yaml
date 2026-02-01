@@ -1,0 +1,22 @@
+app:
+  name: "scheduler"
+  env: "dev"
+  owner: "crabzie"
+
+logger:
+  level: "debug"
+  development: true
+  disableStacktrace: false
+  encoding: "console"
+
+db:
+  connection: "postgres"
+  host: "localhost"
+  port: "5432"
+  user: "scheduler"
+  password: "your_postgres_password"
+  name: "schedulerdb"
+
+redis:
+  addr: "localhost:6379"
+  password: "your_secure_redis_password"

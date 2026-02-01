@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -e
 
 # Check if the node itself is running
 if ! rabbitmq-diagnostics check_running >/dev/null 2>&1; then

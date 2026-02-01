@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/storage/postgresql/migrations"
@@ -51,7 +52,7 @@ func setPoolConfig(url string, logger *zap.Logger) (*pgxpool.Config, error) {
 	return dbCfg, nil
 }
 
-// New creates a new PostgreSQL database instance
+// New creates a new PostgreSQL database instance with retry logic
 func New(ctx context.Context, config *config.DB, logger *zap.Logger) (*DB, error) {
 	url := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable",
 		config.Connection,
@@ -68,23 +69,45 @@ func New(ctx context.Context, config *config.DB, logger *zap.Logger) (*DB, error
 		return nil, err
 	}
 
-	// create concurrent connection pool
-	db, err := pgxpool.NewWithConfig(ctx, dbCfg)
-	if err != nil {
-		return nil, err
+	var db *pgxpool.Pool
+	var lastErr error
+
+	// Retry connection/ping up to 10 times with backoff
+	maxRetries := 10
+	for i := 1; i <= maxRetries; i++ {
+		db, err = pgxpool.NewWithConfig(ctx, dbCfg)
+		if err == nil {
+			if err = db.Ping(ctx); err == nil {
+				// Success
+				psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+				return &DB{
+					db,
+					&psql,
+					url,
+				}, nil
+			}
+		}
+
+		lastErr = err
+		logger.Warn("Failed to connect to Postgres, retrying...",
+			zap.Int("attempt", i),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err),
+		)
+
+		if db != nil {
+			db.Close()
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(i*2) * time.Second):
+			// Backoff: 2s, 4s, 6s...
+		}
 	}
 
-	if err := db.Ping(ctx); err != nil {
-		return nil, err
-	}
-
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	return &DB{
-		db,
-		&psql,
-		url,
-	}, nil
+	return nil, fmt.Errorf("failed to connect to Postgres after %d attempts: %w", maxRetries, lastErr)
 }
 
 // Migrate runs the database migration

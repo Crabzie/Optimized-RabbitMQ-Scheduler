@@ -16,7 +16,7 @@ rabbitmqctl add_vhost fog 2>/dev/null || true
 # 2. IMPORT DEFINITIONS (Queues, Exchanges)
 echo "Importing RabbitMQ definitions..."
 if [ -f /etc/rabbitmq/definitions.json ]; then
-	rabbitmqctl import_definitions /etc/rabbitmq/definitions.json 2>/dev/null || true
+	rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
 	echo "Definitions imported."
 else
 	echo "Warning: definitions.json not found!"

@@ -1,41 +1,41 @@
 {
   "vhosts": [
     {
-      "name": "/fog"
+      "name": "fog"
     }
   ],
   "exchanges": [
     {
       "name": "tasks.direct",
-      "vhost": "/fog",
+      "vhost": "fog",
       "type": "direct",
       "durable": true,
       "auto_delete": false
     },
     {
       "name": "system.fanout",
-      "vhost": "/fog",
+      "vhost": "fog",
       "type": "fanout",
       "durable": true,
       "auto_delete": false
     },
     {
       "name": "results.topic",
-      "vhost": "/fog",
+      "vhost": "fog",
       "type": "topic",
       "durable": true,
       "auto_delete": false
     },
     {
       "name": "metrics.topic",
-      "vhost": "/fog",
+      "vhost": "fog",
       "type": "topic",
       "durable": true,
       "auto_delete": false
     },
     {
       "name": "dlx",
-      "vhost": "/fog",
+      "vhost": "fog",
       "type": "topic",
       "durable": true,
       "auto_delete": false
@@ -44,7 +44,7 @@
   "queues": [
     {
       "name": "tasks.high_priority",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -58,7 +58,7 @@
     },
     {
       "name": "tasks.normal",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -72,7 +72,7 @@
     },
     {
       "name": "tasks.low_priority",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -86,7 +86,7 @@
     },
     {
       "name": "results.success",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -97,7 +97,7 @@
     },
     {
       "name": "results.failed",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -108,7 +108,7 @@
     },
     {
       "name": "metrics.node",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -119,7 +119,7 @@
     },
     {
       "name": "dlq",
-      "vhost": "/fog",
+      "vhost": "fog",
       "durable": true,
       "auto_delete": false,
       "arguments": {
@@ -130,49 +130,49 @@
   "bindings": [
     {
       "source": "tasks.direct",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "tasks.high_priority",
       "destination_type": "queue",
-      "routing_key": "high_priority"
+      "routing_key": "task.high"
     },
     {
       "source": "tasks.direct",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "tasks.normal",
       "destination_type": "queue",
-      "routing_key": "normal"
+      "routing_key": "task.normal"
     },
     {
       "source": "tasks.direct",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "tasks.low_priority",
       "destination_type": "queue",
-      "routing_key": "low_priority"
+      "routing_key": "task.low"
     },
     {
       "source": "results.topic",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "results.success",
       "destination_type": "queue",
       "routing_key": "results.success.#"
     },
     {
       "source": "results.topic",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "results.failed",
       "destination_type": "queue",
       "routing_key": "results.failed.#"
     },
     {
       "source": "metrics.topic",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "metrics.node",
       "destination_type": "queue",
       "routing_key": "metrics.node.#"
     },
     {
       "source": "dlx",
-      "vhost": "/fog",
+      "vhost": "fog",
       "destination": "dlq",
       "destination_type": "queue",
       "routing_key": "#"

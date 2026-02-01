@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -39,12 +40,21 @@ func (s *schedulerService) StartScheduler(ctx context.Context, interval time.Dur
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	count := 0
 	for {
 		select {
 		case <-ctx.Done():
 			s.log.Info("Stopping scheduler loop")
 			return
 		case <-ticker.C:
+			count++
+			if count%3 == 0 {
+				nodes, _ := s.coordinator.GetActiveNodes(ctx)
+				s.log.Info("Scheduler Heartbeat - Active and Monitoring",
+					zap.Int("active_nodes", len(nodes)),
+					zap.Duration("interval", interval))
+			}
+
 			if err := s.SchedulePendingTasks(ctx); err != nil {
 				s.log.Error("Failed to schedule tasks", zap.Error(err))
 			}
@@ -62,7 +72,7 @@ func (s *schedulerService) SchedulePendingTasks(ctx context.Context) error {
 		return nil
 	}
 
-	s.log.Debug("Found pending tasks", zap.Int("count", len(tasks)))
+	s.log.Info("Scheduler found pending tasks", zap.Int("count", len(tasks)))
 
 	// 2. Get Active Nodes
 	nodes, err := s.coordinator.GetActiveNodes(ctx)
@@ -74,17 +84,21 @@ func (s *schedulerService) SchedulePendingTasks(ctx context.Context) error {
 		return nil
 	}
 
-	s.log.Debug("Found active nodes", zap.Int("count", len(nodes)))
+	// 3. Optimized Metrics Fetching: Get all node metrics once per cycle
+	metricsMap, err := s.monitor.GetAllNodesMetrics(ctx)
+	if err != nil {
+		s.log.Warn("Failed to fetch batch metrics, will use individual fallback in SelectBestNode", zap.Error(err))
+	}
 
-	// 3. Process each task
+	// 4. Process each task
 	for _, task := range tasks {
-		bestNode, err := s.SelectBestNode(ctx, task, nodes)
+		bestNode, err := s.SelectBestNode(ctx, task, nodes, metricsMap)
 		if err != nil {
 			s.log.Warn("Could not find suitable node for task", zap.String("task_id", task.ID), zap.Error(err))
 			continue
 		}
 
-		// 4. Assign and Publish
+		// 5. Assign and Publish
 		task.AssignedNodeID = bestNode.ID
 		task.Status = domain.TaskStatusScheduled
 
@@ -97,8 +111,6 @@ func (s *schedulerService) SchedulePendingTasks(ctx context.Context) error {
 		// Publish to Queue
 		if err := s.queue.PublishTask(ctx, task); err != nil {
 			s.log.Error("Failed to publish task", zap.Error(err))
-			// Rollback status (optional, but good practice)
-			// s.taskRepo.UpdateStatus(ctx, task.ID, domain.TaskStatusPending, "")
 			continue
 		}
 
@@ -106,15 +118,12 @@ func (s *schedulerService) SchedulePendingTasks(ctx context.Context) error {
 			zap.String("task_id", task.ID),
 			zap.String("node_id", bestNode.ID),
 			zap.Float64("node_cpu_free", bestNode.AvailableCPU()))
-
-		// Optimistically update node resources in memory/Redis?
-		// For now we rely on the next Prometheus scrape or Redis heartbeat
 	}
 
 	return nil
 }
 
-func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task, nodes []*domain.Node) (*domain.Node, error) {
+func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task, nodes []*domain.Node, metrics map[string]domain.NodeMetrics) (*domain.Node, error) {
 	type nodeScore struct {
 		Node  *domain.Node
 		Score float64
@@ -123,17 +132,27 @@ func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task
 	var candidates []nodeScore
 
 	for _, node := range nodes {
-		// Filter 1: Static Capacity Check (if node metadata has static total limits)
-		// For dynamic, we check Prometheus
-
-		cpuUsage, memUsage, err := s.monitor.GetNodeMetrics(ctx, node.ID)
-		if err != nil {
-			s.log.Warn("Failed to get metrics for node", zap.String("node_id", node.ID), zap.Error(err))
-			// Assume worst case or skip? Let's skip for safety
-			continue
+		var cpuUsage, memUsage float64
+		// Check if we have batch metrics for this node
+		if m, ok := metrics[node.ID]; ok {
+			cpuUsage = m.CPUUsage
+			memUsage = m.MemUsage
+		} else {
+			// Fallback to individual fetch
+			var err error
+			cpuUsage, memUsage, err = s.monitor.GetNodeMetrics(ctx, node.ID)
+			if err != nil {
+				s.log.Warn("Failed to get metrics for node, skipping", zap.String("node_id", node.ID), zap.Error(err))
+				continue
+			}
 		}
 
-		node.UsedCPU = cpuUsage
+		s.log.Debug("Evaluated node capacity",
+			zap.String("node_id", node.ID),
+			zap.Float64("used_cpu", cpuUsage),
+			zap.Float64("used_mem", memUsage))
+
+		node.UsedCPU = (cpuUsage / 100.0) * node.TotalCPU
 		node.UsedMemory = memUsage
 
 		// Check Constraints
@@ -170,7 +189,7 @@ func (s *schedulerService) SelectBestNode(ctx context.Context, task *domain.Task
 	}
 
 	if len(candidates) == 0 {
-		return nil, context.DeadlineExceeded // Or custom error "No node found"
+		return nil, fmt.Errorf("no suitable node found (all nodes at capacity)")
 	}
 
 	// Sort Descending

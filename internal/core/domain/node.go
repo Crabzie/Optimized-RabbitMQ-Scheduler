@@ -31,3 +31,9 @@ func (n *Node) AvailableCPU() float64 {
 func (n *Node) AvailableMemory() float64 {
 	return n.TotalMemory - n.UsedMemory
 }
+
+// NodeMetrics represents the resource usage of a node
+type NodeMetrics struct {
+	CPUUsage float64 // Percentage (0-100)
+	MemUsage float64 // In MB
+}

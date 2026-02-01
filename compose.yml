@@ -64,7 +64,7 @@ x-rabbitmq-base: &rabbitmq-base
     - fog-network
   # Use default entrypoint but wrap the command to run our init script
   command: >
-    sh -c "/bin/sh /init_infra.sh & 
+    sh -c "/bin/sh /init_infra.sh &
     exec docker-entrypoint.sh rabbitmq-server"
   healthcheck:
     test: ["CMD", "/health/rabbitmq_users_ready.sh"]
@@ -176,13 +176,12 @@ services:
 
   rabbitmq:
     <<: *rabbitmq-base
-    hostname: rabbitmq
+    user: root
     ports:
       - "15672:15672"
       - "5672:5672"
     environment:
       <<: *rabbitmq-common-env
-      RABBITMQ_NODENAME: rabbit@rabbitmq
     deploy:
       placement:
         constraints:
@@ -303,6 +302,7 @@ services:
     networks:
       - fog-network
     deploy:
+      replicas: 0
       placement:
         constraints:
           - node.labels.manager-master == true
@@ -331,6 +331,7 @@ services:
       PG_PASS: ${PG_PASS}
       PG_DB: ${PG_DB}
     deploy:
+      replicas: 0
       placement:
         constraints:
           - node.labels.manager-master == true
@@ -361,6 +362,7 @@ services:
       PG_PASS: ${PG_PASS}
       PG_DB: ${PG_DB}
     deploy:
+      replicas: 0
       placement:
         constraints:
           - node.labels.manager-master == true
@@ -391,6 +393,7 @@ services:
       PG_PASS: ${PG_PASS}
       PG_DB: ${PG_DB}
     deploy:
+      replicas: 0
       placement:
         constraints:
           - node.labels.manager-master == true

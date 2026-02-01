@@ -3,11 +3,16 @@ package service
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"time"
 
+	"net/http"
+
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/core/domain"
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/core/port"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +22,10 @@ type workerService struct {
 	coordinator port.NodeCoordinator
 	queue       port.QueueService
 	log         *zap.Logger
+
+	// Metrics
+	cpuGauge *prometheus.GaugeVec
+	memGauge *prometheus.GaugeVec
 }
 
 func NewWorkerService(
@@ -26,12 +35,28 @@ func NewWorkerService(
 	queue port.QueueService,
 	log *zap.Logger,
 ) *workerService {
+	// Register Prometheus Metrics
+	cpuGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "node_cpu_usage_percent",
+		Help: "Current CPU usage percentage (simulated)",
+	}, []string{"instance"})
+
+	memGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "node_memory_usage_bytes",
+		Help: "Current memory usage in bytes (simulated)",
+	}, []string{"instance"})
+
+	prometheus.MustRegister(cpuGauge)
+	prometheus.MustRegister(memGauge)
+
 	return &workerService{
 		nodeID:      nodeID,
 		taskRepo:    taskRepo,
 		coordinator: coordinator,
 		queue:       queue,
 		log:         log,
+		cpuGauge:    cpuGauge,
+		memGauge:    memGauge,
 	}
 }
 
@@ -39,10 +64,13 @@ func NewWorkerService(
 func (w *workerService) StartWorker(ctx context.Context) error {
 	w.log.Info("Starting Worker Node", zap.String("id", w.nodeID))
 
-	// 1. Start Heartbeat Loop (Background)
+	// 1. Start Metrics Server
+	go w.startMetricsServer()
+
+	// 2. Start Heartbeat Loop (Background)
 	go w.heartbeatLoop(ctx)
 
-	// 2. Start Consumer
+	// 3. Start Consumer
 	// The handler function defines what we do when we get a task
 	err := w.queue.ConsumeTasks(ctx, w.processTask)
 	if err != nil {
@@ -61,9 +89,14 @@ func (w *workerService) heartbeatLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Ping Redis to say "I'm alive"
-			// In a real system, we'd gather actual CPU/Mem here if pushing.
-			// Since we use Prometheus pull, this is mostly for "Active Nodes" list discovery.
+			// Update metrics for Prometheus to scrape
+			// Simulate realistic fluctuations
+			cpuUsage := 5.0 + rand.Float64()*15.0  // 5-20% usage
+			memUsage := 1024 + rand.Float64()*1024 // 1-2GB usage
+
+			w.cpuGauge.WithLabelValues(w.nodeID).Set(cpuUsage)
+			w.memGauge.WithLabelValues(w.nodeID).Set(memUsage * 1024 * 1024)
+
 			node := &domain.Node{
 				ID:            w.nodeID,
 				Hostname:      os.Getenv("HOSTNAME"),
@@ -77,14 +110,17 @@ func (w *workerService) heartbeatLoop(ctx context.Context) {
 			if err := w.coordinator.RegisterNode(ctx, node); err != nil {
 				w.log.Error("Heartbeat failed", zap.Error(err))
 			} else {
-				w.log.Debug("Heartbeat sent")
+				w.log.Info("Heartbeat sent - Node registered as active")
 			}
 		}
 	}
 }
 
 func (w *workerService) processTask(task *domain.Task) error {
-	w.log.Info("Processing Task...", zap.String("id", task.ID), zap.String("cmd", fmt.Sprintf("%v", task.Command)))
+	w.log.Info("Worker received task from queue",
+		zap.String("task_id", task.ID),
+		zap.String("image", task.Image),
+		zap.Int("priority", task.Priority))
 
 	// 1. Update Status to RUNNING
 	ctx := context.Background() // New context for DB op
@@ -104,6 +140,21 @@ func (w *workerService) processTask(task *domain.Task) error {
 		return err
 	}
 
-	w.log.Info("Task Completed", zap.String("id", task.ID))
+	w.log.Info("Task finished successfully", zap.String("task_id", task.ID))
 	return nil
+}
+
+func (w *workerService) startMetricsServer() {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	srv := &http.Server{
+		Addr:    ":2112",
+		Handler: mux,
+	}
+
+	w.log.Info("Starting metrics server on :2112")
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		w.log.Error("Metrics server failed", zap.Error(err))
+	}
 }

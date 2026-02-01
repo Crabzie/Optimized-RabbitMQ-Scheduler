@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,6 +35,8 @@ func main() {
 	zap.ReplaceGlobals(log)
 	log.Info("Starting Scheduler Application")
 
+	escapedPassword := url.QueryEscape(appConfig.DB.Password)
+	appConfig.DB.Password = escapedPassword
 	// 2. Init Adapters
 
 	// Postgres
@@ -57,6 +60,7 @@ func main() {
 			DB:       0,
 		})
 		if err := redisClient.Ping(rootCtx).Err(); err == nil {
+			log.Info("Connected to Redis successfully", zap.String("addr", appConfig.Redis.Addr))
 			break
 		} else {
 			log.Warn("Failed to connect to Redis, retrying...", zap.Int("attempt", i), zap.Error(err))
@@ -99,6 +103,7 @@ func main() {
 		// Log but maybe not fatal if we want to retry? For now fatal.
 		log.Fatal("Failed to init RabbitMQ", zap.Error(err), zap.String("url", rabbitURL))
 	}
+	log.Info("Connected to RabbitMQ successfully", zap.String("host", rabbitHost))
 
 	// Prometheus
 	promURL := "http://prometheus:9090" // Container name

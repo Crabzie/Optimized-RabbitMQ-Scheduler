@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -35,6 +36,9 @@ func main() {
 	log = log.With(zap.String("service", "worker"), zap.String("node", nodeName))
 	log.Info("Starting Fog Node Worker")
 
+	escapedPassword := url.QueryEscape(appConfig.DB.Password)
+	appConfig.DB.Password = escapedPassword
+
 	// 2. Init Adapters
 
 	// Postgres
@@ -54,6 +58,7 @@ func main() {
 			DB:       0,
 		})
 		if err := redisClient.Ping(rootCtx).Err(); err == nil {
+			log.Info("Connected to Redis successfully", zap.String("addr", appConfig.Redis.Addr))
 			break
 		} else {
 			log.Warn("Failed to connect to Redis, retrying...", zap.Int("attempt", i), zap.Error(err))
@@ -94,6 +99,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to init RabbitMQ", zap.Error(err), zap.String("url", rabbitURL))
 	}
+	log.Info("Connected to RabbitMQ successfully", zap.String("host", rabbitHost))
 
 	// 3. Init Worker Service
 	worker := service.NewWorkerService(nodeName, taskRepo, nodeCoordinator, queueService, log)

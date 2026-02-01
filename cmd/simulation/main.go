@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	config "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/utils"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -19,7 +20,14 @@ func main() {
 	// Connect to DB (using standard sql for simplicity in script)
 	// Connection string assumes running from host targeting localhost port mapped
 	// In docker network it would be "postgres", but for "make test-simulation" running on host, we need localhost
-	connStr := "postgres://scheduler:your_postgres_password@localhost:5432/schedulerdb?sslmode=disable"
+
+	// 1. Init Config & Logger
+	appConfig := config.New()
+	log.Fatal("Starting Scheduler Application")
+
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		appConfig.DB.User, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
@@ -76,7 +84,7 @@ func main() {
 					mem = 128
 				}
 
-				query := `INSERT INTO tasks (id, name, image, status, priority, required_cpu, required_memory, created_at, updated_at) 
+				query := `INSERT INTO tasks (id, name, image, status, priority, required_cpu, required_memory, created_at, updated_at)
 						  VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, NOW(), NOW())`
 
 				_, err := db.Exec(query, taskID, "simulation-job", "alpine", priority, cpu, mem)
@@ -97,7 +105,7 @@ func monitorAssignments(db *sql.DB) {
 
 	for range ticker.C {
 		// Find tasks that changed from PENDING to SCHEDULED/RUNNING recently
-		query := `SELECT id, assigned_node_id, status, required_cpu, required_memory FROM tasks 
+		query := `SELECT id, assigned_node_id, status, required_cpu, required_memory FROM tasks
 				  WHERE updated_at > $1 AND status != 'PENDING' AND assigned_node_id != ''
 				  ORDER BY updated_at DESC`
 

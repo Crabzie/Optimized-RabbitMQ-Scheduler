@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,6 +35,8 @@ func main() {
 	zap.ReplaceGlobals(log)
 	log.Info("Starting Scheduler Application")
 
+	escapedPassword := url.QueryEscape(appConfig.DB.Password)
+	appConfig.DB.Password = escapedPassword
 	// 2. Init Adapters
 
 	// Postgres

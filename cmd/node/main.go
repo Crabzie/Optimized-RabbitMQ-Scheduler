@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,6 +35,9 @@ func main() {
 	}
 	log = log.With(zap.String("service", "worker"), zap.String("node", nodeName))
 	log.Info("Starting Fog Node Worker")
+
+	escapedPassword := url.QueryEscape(appConfig.DB.Password)
+	appConfig.DB.Password = escapedPassword
 
 	// 2. Init Adapters
 

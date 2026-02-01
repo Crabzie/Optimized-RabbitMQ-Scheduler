@@ -23,7 +23,7 @@ func main() {
 
 	// 1. Init Config & Logger
 	appConfig := config.New()
-	log.Fatal("Starting Scheduler Application")
+	log.Print("Starting Scheduler Application")
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		appConfig.DB.User, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)

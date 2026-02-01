@@ -62,10 +62,10 @@ x-rabbitmq-base: &rabbitmq-base
       mode: 0755
   networks:
     - fog-network
-  entrypoint: ["/bin/sh", "-c"]
-  command: |
-    /bin/sh /init_infra.sh 2>&1 | tee /var/log/init.log &
-    exec rabbitmq-server
+  # Use default entrypoint but wrap the command to run our init script
+  command: >
+    sh -c "/bin/sh /init_infra.sh & 
+    exec docker-entrypoint.sh rabbitmq-server"
   healthcheck:
     test: ["CMD", "/health/rabbitmq_users_ready.sh"]
     interval: 30s

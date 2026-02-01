@@ -107,7 +107,7 @@ func (w *workerService) heartbeatLoop(ctx context.Context) {
 			if err := w.coordinator.RegisterNode(ctx, node); err != nil {
 				w.log.Error("Heartbeat failed", zap.Error(err))
 			} else {
-				w.log.Debug("Heartbeat sent")
+				w.log.Info("Heartbeat sent - Node registered as active")
 			}
 		}
 	}

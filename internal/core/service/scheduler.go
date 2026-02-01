@@ -39,12 +39,21 @@ func (s *schedulerService) StartScheduler(ctx context.Context, interval time.Dur
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	count := 0
 	for {
 		select {
 		case <-ctx.Done():
 			s.log.Info("Stopping scheduler loop")
 			return
 		case <-ticker.C:
+			count++
+			if count%3 == 0 {
+				nodes, _ := s.coordinator.GetActiveNodes(ctx)
+				s.log.Info("Scheduler Heartbeat - Active and Monitoring",
+					zap.Int("active_nodes", len(nodes)),
+					zap.Duration("interval", interval))
+			}
+
 			if err := s.SchedulePendingTasks(ctx); err != nil {
 				s.log.Error("Failed to schedule tasks", zap.Error(err))
 			}

@@ -231,10 +231,6 @@ test-simulation:
 	@echo "Ensure you have 'make up' running first!"
 	@go run cmd/simulation/main.go
 
-monitor-nodes:
-	@echo "Starting Fog Node Activity Monitor..."
-	@go run cmd/monitor/main.go
-
 # Logs
 logs:
 	@echo "Recent Logs"
@@ -397,8 +393,8 @@ debug:
 	@docker volume ls | grep $(PROJECT_NAME) || echo "No volumes found"
 
 monitor:
-	@echo "Monitoring (CTRL+C to stop)..."
-	@watch -n 2 'make health'
+	@echo "Monitoring Fog Network (CTRL+C to stop)..."
+	@docker service logs -f $(PROJECT_NAME)_scheduler $(PROJECT_NAME)_fog-node-1 $(PROJECT_NAME)_fog-node-2 $(PROJECT_NAME)_fog-node-3
 
 # Help
 help:
@@ -439,12 +435,10 @@ help:
 	@echo "  make logs              Recent logs"
 	@echo "  make logs-follow       Follow all logs"
 	@echo "  make debug             Stack debug info"
-	@echo "  make monitor           Live health monitoring"
-	@echo "  make monitor-nodes     Live node activity tracking"
+	@echo "  make monitor           Live log aggregation (scheduler + nodes)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make restart           Restart services"
 	@echo "  make clean             Remove all data"
 	@echo "  make test-failover     Test node recovery"
 	@echo "  make test-simulation   Run 5-min traffic simulation"
-```

@@ -23,32 +23,19 @@ This guide explains how to use the monitoring tools included in the Optimized Ra
 - **Scheduler Insight**: The scheduler uses these metrics to decide which node is "least busy" when assigning a task.
 - **RabbitMQ Overview**: Metrics about message rates and queue lengths are also available.
 
-## 3. High Debugging Logs
-With the latest changes, you can now follow the complete lifecycle of a task in the logs:
+## 3. Live Logs
+To see exactly how tasks are being distributed and processed in real-time, use the aggregated monitoring command.
 
-1. **Scheduler**: `Scheduler found pending tasks` -> `Successfully scheduled task (task_id -> node_id)`
-2. **Database (Repository)**: `Task status updated in DB (status: SCHEDULED)`
-3. **Worker (Fog Node)**: `Worker received task from queue` -> `Task status updated in DB (status: RUNNING)`
-4. **Worker (Fog Node)**: `Task finished successfully` -> `Task status updated in DB (status: COMPLETED)`
+### Aggregated Node & Scheduler View (Recommended)
+This command follows logs from the scheduler and all three fog nodes simultaneously. It's the best way to see the "flow" of tasks.
+```bash
+make monitor
+```
 
-### How to watch:
+### Infrastructure Logs
+To see logs from RabbitMQ, Redis, and Postgres:
 ```bash
 make logs-follow
 ```
 
-## 4. Node Activity Monitor (New!)
-For a much cleaner view of what the fog nodes are doing, use the dedicated monitor tool.
-
-### How to watch:
-1. Open a new terminal.
-2. Run:
-```bash
-make monitor-nodes
-```
-
-### What you will see:
-- `[NODE-1] 📥 Received Task: task-123`
-- `[NODE-1] ⚙️  Now Running:  task-123`
-- `[NODE-1] ✅ Task Finished: task-123`
-
-This tool filters out the noise and highlights exactly when tasks arrive and complete.
+This setup provides a clean, labeled view of the entire scheduling process.

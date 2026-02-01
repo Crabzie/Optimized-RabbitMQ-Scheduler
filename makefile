@@ -231,6 +231,10 @@ test-simulation:
 	@echo "Ensure you have 'make up' running first!"
 	@go run cmd/simulation/main.go
 
+monitor-nodes:
+	@echo "Starting Fog Node Activity Monitor..."
+	@go run cmd/monitor/main.go
+
 # Logs
 logs:
 	@echo "Recent Logs"
@@ -436,11 +440,11 @@ help:
 	@echo "  make logs-follow       Follow all logs"
 	@echo "  make debug             Stack debug info"
 	@echo "  make monitor           Live health monitoring"
+	@echo "  make monitor-nodes     Live node activity tracking"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make restart           Restart services"
 	@echo "  make clean             Remove all data"
-	@echo "  make clean             Remove all data"
 	@echo "  make test-failover     Test node recovery"
 	@echo "  make test-simulation   Run 5-min traffic simulation"
-
+```

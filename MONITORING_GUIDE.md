@@ -35,3 +35,20 @@ With the latest changes, you can now follow the complete lifecycle of a task in 
 ```bash
 make logs-follow
 ```
+
+## 4. Node Activity Monitor (New!)
+For a much cleaner view of what the fog nodes are doing, use the dedicated monitor tool.
+
+### How to watch:
+1. Open a new terminal.
+2. Run:
+```bash
+make monitor-nodes
+```
+
+### What you will see:
+- `[NODE-1] 📥 Received Task: task-123`
+- `[NODE-1] ⚙️  Now Running:  task-123`
+- `[NODE-1] ✅ Task Finished: task-123`
+
+This tool filters out the noise and highlights exactly when tasks arrive and complete.

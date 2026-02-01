@@ -41,7 +41,7 @@ func setPoolConfig(url string, logger *zap.Logger) (*pgxpool.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	dbCfg.MaxConns = 1
+	dbCfg.MaxConns = 4
 	dbCfg.ConnConfig.Tracer = &tracelog.TraceLog{
 		Logger:   zaptracer.NewLogger(logger),
 		LogLevel: tracelog.LogLevelInfo,

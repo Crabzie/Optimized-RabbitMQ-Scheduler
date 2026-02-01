@@ -37,6 +37,7 @@ func main() {
 	log.Print("DEBUG: sql.Open success")
 	defer db.Close()
 
+	fmt.Println("DEBUG: About to ping DB...")
 	if err := db.Ping(); err != nil {
 		log.Fatal("DB unreachable (ensure 'make up' is running):", err)
 	}

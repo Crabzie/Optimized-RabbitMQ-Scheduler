@@ -1,14 +1,14 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
 	config "github.com/crabzie/Optimized-RabbitMQ-Scheduler/config/utils"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -17,30 +17,34 @@ const (
 )
 
 func main() {
-	// Connect to DB (using standard sql for simplicity in script)
-	// Connection string assumes running from host targeting localhost port mapped
-	// In docker network it would be "postgres", but for "make test-simulation" running on host, we need localhost
+	ctx := context.Background()
 
-	// 1. Init Config & Logger
+	// 1. Init Config
 	appConfig := config.New()
-	log.Print("Starting Scheduler Application")
-	log.Print("DEBUG: Config loaded:", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+	log.Println("Starting Scheduler Application")
+	log.Printf("DEBUG: Config loaded: %s:%s/%s", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		appConfig.DB.Connection, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+	// Build connection string with CORRECT field (User not Connection)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&pool_max_conns=10",
+		appConfig.DB.User, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 
-	db, err := sql.Open("pgx", connStr)
+	fmt.Printf("DEBUG: ConnStr built: postgres://%s:***@%s:%s/%s\n",
+		appConfig.DB.User, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
+
+	// 2. Connect using pgxpool (native pgx, better than database/sql)
+	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
-		log.Fatal("Failed to connect to DB:", err)
+		log.Fatalf("Failed to create pool: %v", err)
 	}
-	log.Print("DEBUG: sql.Open success")
-	defer db.Close()
+	defer pool.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Fatal("DB unreachable (ensure 'make up' is running):", err)
+	// 3. Ping to verify connection
+	log.Println("DEBUG: Pinging DB...")
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("DB unreachable (ensure 'make up' is running): %v", err)
 	}
-	fmt.Println("DEBUG: sql.Ping success")
 
+	fmt.Println("✅ DB Ping success!")
 	fmt.Println("🚀 Starting 5-minute Traffic Simulation...")
 	fmt.Println("   Monitoring Scheduler decisions...")
 
@@ -49,10 +53,9 @@ func main() {
 	defer ticker.Stop()
 
 	// Monitor stats in background
-	go monitorAssignments(db)
+	go monitorAssignments(ctx, pool)
 
 	taskCount := 0
-
 	for {
 		select {
 		case <-ticker.C:
@@ -88,19 +91,21 @@ func main() {
 				}
 
 				query := `INSERT INTO tasks (id, name, image, status, priority, required_cpu, required_memory, created_at, updated_at)
-						  VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, NOW(), NOW())`
+				          VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, NOW(), NOW())`
 
-				_, err := db.Exec(query, taskID, "simulation-job", "alpine", priority, cpu, mem)
+				_, err := pool.Exec(ctx, query, taskID, "simulation-job", "alpine", priority, cpu, mem)
 				if err != nil {
-					log.Printf("Failed to insert task %s: %v", taskID, err)
+					log.Printf("❌ Failed to insert task %s: %v", taskID, err)
+				} else {
+					fmt.Printf("   ✓ Task %s created (Priority: %d, CPU: %.1f, Mem: %.0f MB)\n",
+						taskID, priority, cpu, mem)
 				}
 			}
-
 		}
 	}
 }
 
-func monitorAssignments(db *sql.DB) {
+func monitorAssignments(ctx context.Context, pool *pgxpool.Pool) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -109,25 +114,33 @@ func monitorAssignments(db *sql.DB) {
 	for range ticker.C {
 		// Find tasks that changed from PENDING to SCHEDULED/RUNNING recently
 		query := `SELECT id, assigned_node_id, status, required_cpu, required_memory FROM tasks
-				  WHERE updated_at > $1 AND status != 'PENDING' AND assigned_node_id != ''
-				  ORDER BY updated_at DESC`
+		          WHERE updated_at > $1 AND status != 'PENDING' AND assigned_node_id != ''
+		          ORDER BY updated_at DESC`
 
-		rows, err := db.Query(query, lastChecked)
+		rows, err := pool.Query(ctx, query, lastChecked)
 		if err != nil {
-			log.Println("Monitor error:", err)
+			log.Printf("Monitor error: %v", err)
 			continue
 		}
 
 		checkTime := time.Now()
+		count := 0
 
 		for rows.Next() {
 			var id, node, status string
 			var cpu, mem float64
 			if err := rows.Scan(&id, &node, &status, &cpu, &mem); err == nil {
-				fmt.Printf("   👀 Scheduler assigned %s -> %s (Req: %.1f CPU, %.0f MB)\n", id, node, cpu, mem)
+				fmt.Printf("   👀 Scheduler assigned %s -> %s (Status: %s, Req: %.1f CPU, %.0f MB)\n",
+					id, node, status, cpu, mem)
+				count++
 			}
 		}
 		rows.Close()
+
+		if count > 0 {
+			fmt.Printf("   📊 Total assignments detected: %d\n", count)
+		}
+
 		lastChecked = checkTime
 	}
 }

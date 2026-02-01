@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"time"
 
@@ -36,13 +37,13 @@ func NewWorkerService(
 ) *workerService {
 	// Register Prometheus Metrics
 	cpuGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "node_cpu_seconds_total", // Matching the query the scheduler uses
+		Name: "node_cpu_usage_percent",
 		Help: "Current CPU usage percentage (simulated)",
-	}, []string{"instance", "mode"}) // instance label matches scheduler query
+	}, []string{"instance"})
 
 	memGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "node_memory_MemTotal_bytes",
-		Help: "Total memory available (simulated)",
+		Name: "node_memory_usage_bytes",
+		Help: "Current memory usage in bytes (simulated)",
 	}, []string{"instance"})
 
 	prometheus.MustRegister(cpuGauge)
@@ -89,10 +90,12 @@ func (w *workerService) heartbeatLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			// Update metrics for Prometheus to scrape
-			// In a real system, we'd gather actual system metrics.
-			// For this prototype, we'll simulate some realistic numbers.
-			w.cpuGauge.WithLabelValues(w.nodeID, "idle").Set(95.0) // 95% idle = 5% usage
-			w.memGauge.WithLabelValues(w.nodeID).Set(4096 * 1024 * 1024)
+			// Simulate realistic fluctuations
+			cpuUsage := 5.0 + rand.Float64()*15.0  // 5-20% usage
+			memUsage := 1024 + rand.Float64()*1024 // 1-2GB usage
+
+			w.cpuGauge.WithLabelValues(w.nodeID).Set(cpuUsage)
+			w.memGauge.WithLabelValues(w.nodeID).Set(memUsage * 1024 * 1024)
 
 			node := &domain.Node{
 				ID:            w.nodeID,

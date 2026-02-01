@@ -29,4 +29,5 @@ type QueueService interface {
 // MonitoringService defines how we fetch live metrics (Prometheus)
 type MonitoringService interface {
 	GetNodeMetrics(ctx context.Context, nodeID string) (float64, float64, error) // Returns CPU, Mem usage
+	GetAllNodesMetrics(ctx context.Context) (map[string]domain.NodeMetrics, error)
 }

@@ -3,6 +3,8 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/core/domain"
 	"github.com/crabzie/Optimized-RabbitMQ-Scheduler/internal/core/port"
@@ -17,21 +19,36 @@ type queueService struct {
 }
 
 func NewQueueService(url string, log *zap.Logger) (port.QueueService, error) {
-	conn, err := amqp.Dial(url)
-	if err != nil {
-		return nil, err
+	var conn *amqp.Connection
+	var err error
+
+	// Retry connection up to 10 times with backoff
+	maxRetries := 10
+	for i := 1; i <= maxRetries; i++ {
+		conn, err = amqp.Dial(url)
+		if err == nil {
+			ch, err := conn.Channel()
+			if err == nil {
+				return &queueService{
+					conn: conn,
+					ch:   ch,
+					log:  log,
+				}, nil
+			}
+			conn.Close()
+		}
+
+		log.Warn("Failed to connect to RabbitMQ, retrying...",
+			zap.Int("attempt", i),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err),
+		)
+
+		// Simple incremental backoff
+		time.Sleep(time.Duration(i*2) * time.Second)
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return nil, err
-	}
-
-	return &queueService{
-		conn: conn,
-		ch:   ch,
-		log:  log,
-	}, nil
+	return nil, fmt.Errorf("failed to connect to RabbitMQ after %d attempts: %w", maxRetries, err)
 }
 
 func (q *queueService) PublishTask(ctx context.Context, task *domain.Task) error {

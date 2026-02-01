@@ -44,14 +44,25 @@ func main() {
 	}
 	taskRepo := postgres.NewTaskRepository(dbService.Pool, log)
 
-	// Redis
-	redisClient := redigo.NewClient(&redigo.Options{
-		Addr:     appConfig.Redis.Addr,
-		Password: appConfig.Redis.Password,
-		DB:       0,
-	})
-	if err := redisClient.Ping(rootCtx).Err(); err != nil {
-		log.Fatal("Failed to init Redis", zap.Error(err))
+	// Redis with Retry
+	var redisClient *redigo.Client
+	maxRedisRetries := 10
+	for i := 1; i <= maxRedisRetries; i++ {
+		redisClient = redigo.NewClient(&redigo.Options{
+			Addr:     appConfig.Redis.Addr,
+			Password: appConfig.Redis.Password,
+			DB:       0,
+		})
+		if err := redisClient.Ping(rootCtx).Err(); err == nil {
+			break
+		} else {
+			log.Warn("Failed to connect to Redis, retrying...", zap.Int("attempt", i), zap.Error(err))
+			redisClient.Close()
+			if i == maxRedisRetries {
+				log.Fatal("Failed to init Redis after max retries", zap.Error(err))
+			}
+			time.Sleep(time.Duration(i*2) * time.Second)
+		}
 	}
 	nodeCoordinator := redisAdapter.NewNodeCoordinator(redisClient, log)
 

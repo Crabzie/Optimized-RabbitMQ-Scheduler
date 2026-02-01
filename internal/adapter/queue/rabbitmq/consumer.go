@@ -15,9 +15,9 @@ func (q *queueService) ConsumeTasks(ctx context.Context, handler func(task *doma
 	// Real world: workers might listen to "tasks.high" and "tasks.normal" with different consumers.
 	qName := "tasks.normal"
 
-	_, err := q.ch.QueueDeclare(
+	_, err := q.ch.QueueDeclarePassive(
 		qName, // name
-		true,  // durable (matches definitions.json usually)
+		true,  // durable
 		false, // delete when unused
 		false, // exclusive
 		false, // no-wait

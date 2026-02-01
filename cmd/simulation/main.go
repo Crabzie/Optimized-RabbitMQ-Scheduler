@@ -27,8 +27,7 @@ func main() {
 	log.Print("DEBUG: Config loaded:", appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		appConfig.DB.User, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
-	log.Print("DEBUG: ConnStr built:", connStr[:50]+"...")
+		appConfig.DB.Connection, appConfig.DB.Password, appConfig.DB.Host, appConfig.DB.Port, appConfig.DB.Name)
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
@@ -37,10 +36,10 @@ func main() {
 	log.Print("DEBUG: sql.Open success")
 	defer db.Close()
 
-	fmt.Println("DEBUG: About to ping DB...")
 	if err := db.Ping(); err != nil {
 		log.Fatal("DB unreachable (ensure 'make up' is running):", err)
 	}
+	fmt.Println("DEBUG: sql.Ping success")
 
 	fmt.Println("🚀 Starting 5-minute Traffic Simulation...")
 	fmt.Println("   Monitoring Scheduler decisions...")

@@ -55,9 +55,9 @@ up: docker-build
 	@echo ""
 	@echo "Step 2: Waiting for PostgreSQL to be healthy..."
 	@bash -c 'for i in {1..60}; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_postgres"); \
+	  CONTAINER_ID=$$(docker ps -qf "label=com.docker.swarm.service.name=$(PROJECT_NAME)_postgres" --format "{{.ID}}" | head -n 1); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
-	    if docker exec $$CONTAINER_ID pg_isready -U $(PG_USER) -d schedulerdb >/dev/null 2>&1; then \
+	    if docker exec $$CONTAINER_ID pg_isready -U $(PG_USER) -d postgres >/dev/null 2>&1; then \
 	      echo "PostgreSQL is healthy!"; \
 	      exit 0; \
 	    fi; \
@@ -71,7 +71,7 @@ up: docker-build
 	@echo ""
 	@echo "Step 3: Waiting for Redis to be healthy..."
 	@bash -c 'for i in {1..60}; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_redis"); \
+	  CONTAINER_ID=$$(docker ps -qf "label=com.docker.swarm.service.name=$(PROJECT_NAME)_redis" --format "{{.ID}}" | head -n 1); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
 	    if docker exec $$CONTAINER_ID redis-cli -a $(REDIS_PASS) --no-auth-warning PING >/dev/null 2>&1; then \
 	      echo "Redis is healthy!"; \
@@ -90,7 +90,7 @@ up: docker-build
 	@sleep 15
 	@bash -c 'WAIT_COUNT=0; \
 	while [ $$WAIT_COUNT -lt 30 ]; do \
-	  CONTAINER_ID=$$(docker ps -qf "name=$(PROJECT_NAME)_rabbitmq"); \
+	  CONTAINER_ID=$$(docker ps -qf "label=com.docker.swarm.service.name=$(PROJECT_NAME)_rabbitmq" --format "{{.ID}}" | head -n 1); \
 	  if [ -n "$$CONTAINER_ID" ]; then \
 	    if docker exec $$CONTAINER_ID rabbitmq-diagnostics -n rabbit@rabbitmq ping >/dev/null 2>&1; then \
 	      echo ""; \

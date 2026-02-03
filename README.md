@@ -40,9 +40,9 @@ This project implements an intelligent task scheduler for fog computing environm
 
 **Infrastructure**: Production-ready (RabbitMQ cluster, Redis coordination, PostgreSQL persistence, monitoring stack)
 
-**Application Layer**: Under Development
-- **Scheduler**: Core scheduling logic and task distribution (in progress)
-- **Fog Nodes**: Task execution workers (not yet implemented - placeholder services commented out)
+**Application Layer**: Fully Implemented
+- **Scheduler Brain**: Intelligent task distribution based on real-time node metrics and resource constraints.
+- **Intelligent Fog Nodes**: Autonomous workers with heartbeat registration, metrics reporting, and task execution.
 
 ---
 
@@ -138,67 +138,75 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ---
 
+## The Scheduler Brain (Intelligent Core)
+
+The "Brain" of the system resides in the `internal/core/service/scheduler.go`, implementing a polling-based intelligent distribution logic.
+
+### 1. Polling & Monitoring
+The scheduler runs a continuous loop that:
+- **Polls PostgreSQL**: Fetches tasks in `PENDING` status.
+- **Consults Redis**: Retrieves the list of currently active worker nodes.
+- **Fetches Metrics**: Queries Prometheus for real-time CPU and Memory usage of all active nodes.
+
+### 2. Intelligent Selection Logic
+When assigning a task, the scheduler evaluates all active nodes using a multi-criteria scoring algorithm:
+
+**Constraints Check**:
+- Does the node have enough `AvailableCPU` (Total - Used)?
+- Does the node have enough `AvailableMemory`?
+
+**Scoring Formula**:
+Nodes that pass the constraints are scored to find the "best fit":
+```go
+Score = (FreeCPU / taskReqCPU * 0.6) + (FreeMemory / taskReqMemory * 0.4)
+```
+*The node with the highest score (most relative headroom) is selected for the task.*
+
+### 3. Task State Machine
+1.  **PENDING**: Task created in DB.
+2.  **SCHEDULED**: Scheduler assigned a node and published to RabbitMQ.
+3.  **RUNNING**: Worker consumed the task and started execution.
+4.  **COMPLETED/FAILED**: Worker finished the task and updated the final status.
+
+---
+
+## Intelligent Fog Nodes (Workers)
+
+Workers are autonomous agents (`internal/core/service/worker.go`) that manage task execution and node health.
+
+### 1. Autonomous Registration
+- **Heartbeat**: Every 10 seconds, workers register themselves in Redis with a TTL.
+- **Capacity Reporting**: Workers report their total CPU and Memory capacity during registration.
+
+### 2. Real-time Metrics
+- **Prometheus Integration**: Each worker exposes a `/metrics` endpoint (port 2112).
+- **Resource Tracking**: Workers report simulated real-time CPU and Memory usage, which the Scheduler uses for selection.
+
+### 3. Distributed Consumption
+- **RabbitMQ Priority**: Workers consume tasks from RabbitMQ quorum queues.
+- **Graceful Execution**: Workers update the task status in PostgreSQL to `RUNNING` before execution and `COMPLETED` after success.
+
+---
+
 ## Infrastructure Components
 
-### 1. RabbitMQ Cluster
+### 1. RabbitMQ Cluster (Message Bus)
+- **High Availability**: 3-node cluster (manager1, manager2, manager3) using Quorum Queues.
+- **Topology**: 5 exchanges and 7 priority-aware queues configured with dead-letter routing.
+- **Health Checks**: Integrated with Docker Swarm for automatic failover.
 
-**3-node cluster with quorum queues and Raft consensus**
+### 2. Redis Coordination (State Store)
+- **Role**: Mandatory for cluster initialization, heartbeat management, and master election.
+- **Persistence**: AOF enabled to prevent state loss during restarts.
+- **Scaling**: Configured with 1GB memory limit and LRU eviction.
 
-- **Master**: rabbitmq1 (manager1)
-- **Replicas**: rabbitmq2 (manager2), rabbitmq3 (manager3)
-- **Persistence**: Quorum queue replication (3 replicas each)
-- **Partition Handling**: Autoheal strategy
-- **Queue Leadership**: Balanced distribution
-
-**Messaging Topology**:
-- **Exchanges**: 5 total (tasks.direct, system.fanout, results.topic, metrics.topic, dlx)
-- **Queues**: 7 total quorum queues with priority tiers and dead-letter routing
-- **Bindings**: Topic-based and direct routing configured
-
-**Health Checks**: Every 30s, 3 retries, 40s startup grace period
-
-### 2. Redis Coordination Layer
-
-**Single instance managing cluster state via heartbeats**
-
-- **Persistence**: AOF (Append-Only File)
-- **Memory**: 1GB limit with LRU eviction
-- **Data Structures**:
-  - `rabbitmq:cluster:members` (SET) - Active node registry
-  - `rabbitmq:cluster:master` (STRING) - Current master node
-  - `rabbitmq:node:{nodename}:heartbeat` (STRING with 90s TTL) - Liveness tracking
-
-**Critical Role**: Mandatory for cluster initialization and failover coordination
-
-### 3. PostgreSQL Persistent Store
-
-**Stores scheduler metadata and task definitions**
-
-- **Database**: schedulerdb (auto-created)
-- **Configuration**: Custom postgresql.conf
-- **Persistence**: WAL-based durability
-- **Connection Limit**: 100 max connections
-- **Memory**: 256MB shared buffers
-
-**Usage**: Task metadata, scheduling rules, execution history
+### 3. PostgreSQL (Persistence)
+- **Schema**: Stores task metadata, scheduling history, and configuration.
+- **Durability**: WAL-based persistence with dedicated volume mapping.
 
 ### 4. Monitoring Stack
-
-**Prometheus + Grafana for infrastructure visibility**
-
-- **Prometheus**: Scrapes metrics from all RabbitMQ nodes (15s interval)
-- **Grafana**: Pre-configured datasource, ready for dashboard imports
-- **Retention**: 30 days of TSDB data
-
-### 5. Fog Node Workers
-
-**NOT YET IMPLEMENTED - Placeholder services commented in compose.yml**
-
-When implemented, workers will:
-- Pull tasks from RabbitMQ priority queues
-- Execute with resource constraints
-- Publish results back to result queues
-- Support graceful shutdown
+- **Prometheus**: Scrapes metrics from RabbitMQ nodes and Worker instances.
+- **Grafana**: Visualizes cluster health, queue depths, and node resource utilization.
 
 ---
 

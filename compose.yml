@@ -91,6 +91,7 @@ x-rabbitmq-base: &rabbitmq-base
 
 services:
   redis:
+    hostname: redis
     image: redis:latest
     volumes:
       - redis_data:/data
@@ -132,6 +133,7 @@ services:
           memory: 512M
 
   postgres:
+    hostname: postgres
     image: postgres:latest
     environment:
       POSTGRES_DB: ${PG_DB}
@@ -177,6 +179,7 @@ services:
   rabbitmq:
     <<: *rabbitmq-base
     user: root
+    hostname: rabbitmq
     ports:
       - "15672:15672"
       - "5672:5672"
@@ -282,6 +285,7 @@ services:
           memory: 256M
 
   scheduler:
+    hostname: scheduler
     image: ${PROJECT_NAME}_scheduler
     depends_on:
       - rabbitmq
@@ -312,6 +316,7 @@ services:
           memory: 1G
 
   fog-node-1:
+    hostname: fog-node-1
     image: ${PROJECT_NAME}_node
     depends_on:
       - rabbitmq
@@ -343,6 +348,7 @@ services:
       - fog-network
 
   fog-node-2:
+    hostname: fog-node-2
     image: ${PROJECT_NAME}_node
     depends_on:
       - rabbitmq
@@ -374,6 +380,7 @@ services:
       - fog-network
 
   fog-node-3:
+    hostname: fog-node-3
     image: ${PROJECT_NAME}_node
     depends_on:
       - rabbitmq

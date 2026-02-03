@@ -55,7 +55,7 @@ This project implements an intelligent task scheduler for fog computing environm
 │                      Docker Swarm Cluster                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Manager Node (1)                     Worker Nodes (2)          │
+│  Manager Node (1)                     Worker Nodes (3)          │
 │  ┌───────────────┐                    ┌─────────────────┐       │
 │  │   manager1    │                    │    worker1      │       │
 │  │ ┌───────────┐ │                    │  ┌───────────┐  │       │
@@ -70,11 +70,15 @@ This project implements an intelligent task scheduler for fog computing environm
 │  │ │ postgres  │ │    │               │  │(executor) │  │       │
 │  │ │  (5432)   │ │    │               │  └───────────┘  │       │
 │  │ └───────────┘ │    │               └─────────────────┘       │
+│  │ ┌───────────┐ │    │               ┌─────────────────┐       │
+│  │ │ scheduler │ │    │               │    worker3      │       │
+│  │ │  (Brain)  │ │    │               │  ┌───────────┐  │       │
+│  │ └───────────┘ │    │               │  │fog-node-3 │  │       │
+│  │ ┌───────────┐ │    │               │  │(executor) │  │       │
+│  │ │prometheus │ │    │  ◄─ Metrics   │  └───────────┘  │       │
+│  │ └───────────┘ │    │               └─────────────────┘       │
 │  │ ┌───────────┐ │    │                                         │
-│  │ │prometheus │ │    │  ◄─ Metrics Collection                  │
-│  │ └───────────┘ │    │                                         │
-│  │ ┌───────────┐ │    │                                         │
-│  │ │ grafana   │ │    │  ◄─ Visualization                       │
+│  │ │ grafana   │ │    │  ◄─ Visuals                             │
 │  │ └───────────┘ │    │                                         │
 │  └───────────────┘    │                                         │
 │                       │                                         │
@@ -88,9 +92,10 @@ This project implements an intelligent task scheduler for fog computing environm
 
 | Node | Role | Services | Ports |
 |------|------|----------|-------|
-| **manager1** | Manager | rabbitmq, redis, postgres, prometheus, grafana | 15672, 6379, 5432, 9090, 3000 |
+| **manager1** | Manager | rabbitmq, redis, postgres, scheduler, prometheus, grafana | 15672, 6379, 5432, 9090, 3000 |
 | **worker1** | Worker | fog-node-1 (executor) | - |
 | **worker2** | Worker | fog-node-2 (executor) | - |
+| **worker3** | Worker | fog-node-3 (executor) | - |
 
 ### Data Flow Architecture
 
@@ -239,7 +244,7 @@ GRAFANA_PASS=your_grafana_admin_password
 # On manager1
 docker swarm init --advertise-addr <manager1-ip>
 
-# On worker1 and worker2
+# On worker1, worker2, and worker3
 docker swarm join --token <worker-token> <manager1-ip>:2377
 ```
 
@@ -252,6 +257,7 @@ docker node update --label-add manager-master=true {manager1-hostname}
 # Label worker nodes
 docker node update --label-add worker1=true {worker1-hostname}
 docker node update --label-add worker2=true {worker2-hostname}
+docker node update --label-add worker3=true {worker3-hostname}
 ```
 
 ### 3. Deploy Stack
@@ -554,6 +560,10 @@ Service Health
 rabbitmq: healthy
 redis: healthy
 postgres: healthy
+scheduler: healthy
+fog-node-1: healthy
+fog-node-2: healthy
+fog-node-3: healthy
 
 Redis Coordinator
 Members: rabbit@rabbitmq

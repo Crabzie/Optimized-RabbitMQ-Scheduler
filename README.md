@@ -1,6 +1,6 @@
 # Optimized RabbitMQ Scheduler
 
-A highly available, distributed fog computing task scheduler built on Docker Swarm with RabbitMQ clustering, Redis-based coordination, and PostgreSQL for persistent task metadata storage.
+A distributed fog computing task scheduler built on Docker Swarm with RabbitMQ, Redis-based coordination, and PostgreSQL for persistent task metadata storage.
 
 ## 📋 Table of Contents
 
@@ -21,8 +21,8 @@ A highly available, distributed fog computing task scheduler built on Docker Swa
 
 This project implements an intelligent task scheduler for fog computing environments with the following features:
 
-- **High Availability**: 3-node RabbitMQ cluster with quorum queues
-- **Distributed Coordination**: Redis-based cluster membership tracking and heartbeat management
+- **High Availability**: Optimized RabbitMQ configuration with quorum queues
+- **Distributed Coordination**: Redis-based node membership tracking and heartbeat management
 - **Persistent Task Store**: PostgreSQL database for reliable task metadata storage
 - **Priority Scheduling**: Multi-tier task prioritization system
 - **Fault Tolerance**: Automatic failover and node recovery with Redis dependency checks
@@ -30,7 +30,7 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ### Key Technologies
 
-- **RabbitMQ 4.1.6**: Message queue cluster with management plugin
+- **RabbitMQ 4.1.6**: Message queue service with management plugin
 - **Redis 7.2**: Coordination state and cluster membership (command-line configured)
 - **PostgreSQL 18**: Task metadata and scheduler state persistence
 - **Docker Swarm**: Orchestration platform
@@ -38,7 +38,7 @@ This project implements an intelligent task scheduler for fog computing environm
 
 ### Project Status
 
-**Infrastructure**: Production-ready (RabbitMQ cluster, Redis coordination, PostgreSQL persistence, monitoring stack)
+**Infrastructure**: Production-ready (RabbitMQ, Redis coordination, PostgreSQL persistence, monitoring stack)
 
 **Application Layer**: Fully Implemented
 - **Scheduler Brain**: Intelligent task distribution based on real-time node metrics and resource constraints.
@@ -55,12 +55,12 @@ This project implements an intelligent task scheduler for fog computing environm
 │                      Docker Swarm Cluster                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Manager Nodes (3)                    Worker Nodes (2)          │
+│  Manager Node (1)                     Worker Nodes (2)          │
 │  ┌───────────────┐                    ┌─────────────────┐       │
 │  │   manager1    │                    │    worker1      │       │
 │  │ ┌───────────┐ │                    │  ┌───────────┐  │       │
-│  │ │rabbitmq1  │ │                    │  │fog-node-1 │  │       │
-│  │ │(master)   │◄├────┐               │  │(executor) │  │       │
+│  │ │ rabbitmq  │ │                    │  │fog-node-1 │  │       │
+│  │ │ (service) │◄├────┐               │  │(executor) │  │       │
 │  │ └───────────┘ │    │               │  └───────────┘  │       │
 │  │ ┌───────────┐ │    │               └─────────────────┘       │
 │  │ │  redis    │ │    │               ┌─────────────────┐       │
@@ -78,22 +78,6 @@ This project implements an intelligent task scheduler for fog computing environm
 │  │ └───────────┘ │    │                                         │
 │  └───────────────┘    │                                         │
 │                       │                                         │
-│  ┌───────────────┐    │                                         │
-│  │   manager2    │    │                                         │
-│  │ ┌───────────┐ │    │                                         │
-│  │ │rabbitmq2  │◄├────┤                                         │
-│  │ │(replica)  │ │    │                                         │
-│  │ └───────────┘ │    │                                         │
-│  └───────────────┘    │                                         │
-│                       │                                         │
-│  ┌───────────────┐    │                                         │
-│  │   manager3    │    │                                         │
-│  │ ┌───────────┐ │    │                                         │
-│  │ │rabbitmq3  │◄├────┘                                         │
-│  │ │(replica)  │ │                                              │
-│  │ └───────────┘ │                                              │
-│  └───────────────┘                                              │
-│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -104,9 +88,7 @@ This project implements an intelligent task scheduler for fog computing environm
 
 | Node | Role | Services | Ports |
 |------|------|----------|-------|
-| **manager1** | Manager | rabbitmq1 (master), redis, postgres, prometheus, grafana | 15672, 6379, 5432, 9090, 3000 |
-| **manager2** | Manager | rabbitmq2 (replica) | 15673 |
-| **manager3** | Manager | rabbitmq3 (replica) | 15674 |
+| **manager1** | Manager | rabbitmq, redis, postgres, prometheus, grafana | 15672, 6379, 5432, 9090, 3000 |
 | **worker1** | Worker | fog-node-1 (executor) | - |
 | **worker2** | Worker | fog-node-2 (executor) | - |
 
@@ -190,10 +172,10 @@ Workers are autonomous agents (`internal/core/service/worker.go`) that manage ta
 
 ## Infrastructure Components
 
-### 1. RabbitMQ Cluster (Message Bus)
-- **High Availability**: 3-node cluster (manager1, manager2, manager3) using Quorum Queues.
+### 1. RabbitMQ (Message Bus)
+- **Configuration**: Single-node instance on manager1 using Quorum Queues for persistent messaging.
 - **Topology**: 5 exchanges and 7 priority-aware queues configured with dead-letter routing.
-- **Health Checks**: Integrated with Docker Swarm for automatic failover.
+- **Reliability**: Integrated with Docker Swarm for automatic container-level failover.
 
 ### 2. Redis Coordination (State Store)
 - **Role**: Mandatory for cluster initialization, heartbeat management, and master election.
@@ -237,12 +219,8 @@ MQ_ADMIN_USER=admin
 MQ_ADMIN_PASS=your_admin_password
 
 # RabbitMQ Worker Credentials
-MQ_NODE1_WORKER=worker1
-MQ_NODE1_PASS=worker1_password
-MQ_NODE2_WORKER=worker2
-MQ_NODE2_PASS=worker2_password
-MQ_NODE3_WORKER=worker3
-MQ_NODE3_PASS=worker3_password
+MQ_WORKER_USER=worker
+MQ_WORKER_PASS=worker_password
 
 # PostgreSQL
 PG_USER=scheduler
@@ -261,20 +239,15 @@ GRAFANA_PASS=your_grafana_admin_password
 # On manager1
 docker swarm init --advertise-addr <manager1-ip>
 
-# On manager2 and manager3
-docker swarm join --token <manager-token> <manager1-ip>:2377
-
 # On worker1 and worker2
 docker swarm join --token <worker-token> <manager1-ip>:2377
 ```
 
-### 2. Label Worker Nodes
-Commands executed from the master manager:
+### 2. Label Nodes
+Commands executed from the manager:
 ```bash
-# Label manager nodes
+# Label manager node
 docker node update --label-add manager-master=true {manager1-hostname}
-docker node update --label-add manager-rep1=true {manager2-hostname}
-docker node update --label-add manager-rep2=true {manager3-hostname}
 
 # Label worker nodes
 docker node update --label-add worker1=true {worker1-hostname}
@@ -299,9 +272,7 @@ The `make up` command handles sequential startup:
 1. Deploy stack with all services
 2. Wait for PostgreSQL to be healthy
 3. Wait for Redis to be healthy  
-4. Start RabbitMQ1 (master)
-5. Start RabbitMQ2 and wait for cluster join
-6. Start RabbitMQ3 and wait for cluster join
+4. Start RabbitMQ and verify health
 
 ### 4. Verify Deployment
 Commands executed from the master manager:
@@ -326,9 +297,7 @@ make help
 ```
 
 ### 5. Access Management Interfaces
-- **RabbitMQ1**: http://manager1-ip:15672
-- **RabbitMQ2**: http://manager2-ip:15673
-- **RabbitMQ3**: http://manager3-ip:15674
+- **RabbitMQ**: http://manager1-ip:15672
 - **Prometheus**: http://manager1-ip:9090
 - **Grafana**: http://manager1-ip:3000
 - **Username (RabbitMQ)**: `admin` (from `.env`)
@@ -371,38 +340,20 @@ Step 2: Redis Initialization
 │  Ready   │  - redis-cli ping → PONG
 └────┬─────┘
      │
-Step 3: RabbitMQ1 (Primary) Initialization
+Step 3: RabbitMQ Initialization
 ═══════════════════════════════════════════
      ▼
      ┌─ Waits for RabbitMQ internal startup
      ├─ MANDATORY: Checks Redis connectivity (120s timeout)
-     ├─ Reads Redis for existing cluster members
-     ├─ If none: Bootstraps as master
-     ├─ Sets master node in Redis
+     ├─ Bootstraps as standalone node
      ├─ Loads definitions.json (users, exchanges, queues, bindings)
-     ├─ Starts 30s heartbeat loop
-     └─ Ready for secondary nodes to join
-     │
-Step 4: RabbitMQ2 & RabbitMQ3 (Secondary) Initialization
-═════════════════════════════════════════════════════════
-     ▼
-     ├─ Each waits for RabbitMQ internal startup
-     ├─ MANDATORY: Checks Redis connectivity (120s timeout)
-     ├─ Waits for master election in Redis (180s max)
-     ├─ Verifies master reachability
-     ├─ Verifies master Mnesia readiness
-     ├─ Joins cluster via master node
-     ├─ Registers in Redis cluster members
-     ├─ Starts 30s heartbeat loop
-     └─ Ready for task ingestion
+     └─ Starts 30s heartbeat loop
 
 Key Dependencies:
-  • Redis MUST be online before init_infra.sh starts
-    (If Redis unavailable: init_infra.sh exits, node restart loop)
-  • Master must be elected before secondaries can join
-  • All heartbeats stored in Redis for failover tracking
+  • Redis MUST be online before rabbitmq starts
+  • Heartbeat stored in Redis for scheduler tracking
 
-Result: Fully operational 3-node cluster ready for scheduler
+Result: Fully operational RabbitMQ service ready for scheduler
 ```
 
 ### Redis Dependency Check (CRITICAL)
@@ -432,64 +383,53 @@ done
 
 ## Failover Flow
 
-### Scenario 1: Single Node Failure (rabbitmq2 crashes)
+### Scenario 1: RabbitMQ Service Failure
 
 ```
-Initial: 3/3 nodes healthy, heartbeats active
-Event: rabbitmq2 crashes
+Initial: RabbitMQ healthy, heartbeat active
+Event: rabbitmq container crashes
      │
      ├─ T+90s: Heartbeat expires (TTL 90s in Redis)
-     ├─ Redis auto-removes stale node from members
-     ├─ Cluster recognized as 2/3 nodes
-     ├─ Quorum maintained (majority rule)
+     ├─ Scheduler pauses task publishing (node unavailable)
      │
      ├─ T+120s: Docker restart policy triggers (on-failure)
      │
-     ├─ T+125s: rabbitmq2 container restarts
+     ├─ T+125s: rabbitmq container restarts
      │   ├─ RabbitMQ internal startup
      │   ├─ CRITICAL: Checks Redis connectivity
-     │   ├─ Reads cluster members from Redis
-     │   ├─ Decision: REJOIN existing cluster
-     │   ├─ Rejoins via any active member
-     │   └─ Registers in Redis
+     │   └─ Restores session state from definitions.json
      │
-     └─ T+160s: Cluster restored 3/3 nodes
-         Queue leaders rebalanced
-         Quorum queue replicas synced
+     └─ T+160s: Service restored
+         Scheduler resumes task distribution
 
 Impact: ~60s downtime per node (worst case)
-Data Loss: NONE (quorum maintained during outage)
+Data Loss: NONE (quorum queues maintain state on disk)
 ```
 
-### Scenario 2: Redis Failure During Node Restart
+### Scenario 2: Redis Failure During Service Restart
 
 ```
 Initial: All systems healthy
-Event: RabbitMQ2 crashes + Redis goes down simultaneously
+Event: RabbitMQ container crashes + Redis goes down simultaneously
      │
      ├─ T+0s: Both services down
      │
-     ├─ T+120s: RabbitMQ2 restart attempt
+     ├─ T+120s: RabbitMQ restart attempt
      │   └─ CRITICAL: Redis connectivity check FAILS
      │       ├─ Exits init_infra.sh
-     │       └─ Node restart loop (until Redis available)
+     │       └─ Container restart loop (until Redis available)
      │
-     ├─ Cluster State: 2/3 nodes running (rabbitmq1, rabbitmq3)
-     │   └─ Quorum maintained
-     │   └─ Message delivery continues
-     │
-     ├─ RabbitMQ2 State: Restart loop
+     ├─ RabbitMQ State: Restart loop
      │   └─ Retries every 10s (Docker restart policy)
      │   └─ Waits for Redis to come back
      │
      └─ When Redis recovers:
-         ├─ Next RabbitMQ2 restart succeeds
-         ├─ Cluster coordination resumes
-         └─ Cluster restored 3/3 nodes
+         ├─ Next RabbitMQ restart succeeds
+         └─ Service coordination resumes
 
-Cluster Resilience: Maintained (2/3 operational)
-Message Delivery: Unaffected
-Scheduler Impact: Cannot coordinate until Redis recovered
+Service Resilience: Self-healing via Docker Swarm
+Message Delivery: Buffers locally until Postgres/RabbitMQ ready
+Scheduler Impact: Cannot coordinate until Redis/RabbitMQ recovered
 ```
 
 ### Scenario 3: PostgreSQL Failure
@@ -611,17 +551,13 @@ make test-failover     # Test node recovery
 $ make health
 
 Service Health
-rabbitmq1: healthy
-rabbitmq2: healthy
-rabbitmq3: healthy
-
+rabbitmq: healthy
 redis: healthy
+postgres: healthy
 
 Redis Coordinator
-Members: rabbit@rabbitmq1 rabbit@rabbitmq2 rabbit@rabbitmq3
-Master:  rabbit@rabbitmq1
-
-postgres: healthy
+Members: rabbit@rabbitmq
+Master:  rabbit@rabbitmq
 ```
 
 ---
